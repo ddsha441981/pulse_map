@@ -129,7 +129,11 @@ impl Slot {
         self.data[0] & 0x7F
     }
 
-    // ── Key matching ──
+    /// Get the key from a slab-mode slot.
+    #[inline]
+    pub fn slab_key(&self) -> &[u8] {
+        self.slab_entry().key()
+    }
 
     /// Check if this slot's key matches the given key.
     #[inline]

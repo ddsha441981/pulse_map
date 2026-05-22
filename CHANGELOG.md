@@ -62,47 +62,96 @@ The foundation of PulseMap: a 64-byte cache-line hash table with built-in evicti
 
 ---
 
-## [v0.2.0] — Planned
+## [v0.2.0] — 2026-05-29
 
-### 🚀 Generic Types + Iterator + Performance
+### 🚀 Generic Types + Iterator + Traits
 
-**Planned Features**
-- [ ] Generic key/value types: `PulseMap<K: Hash + Eq, V>`
-- [ ] Iterator support: `.iter()`, `.keys()`, `.values()`
-- [ ] `Entry` API: `map.entry(key).or_insert(value)`
-- [ ] `Debug` and `Display` trait implementations
-- [ ] `From`/`Into` conversions from std::HashMap
-- [ ] `Extend` trait for bulk insertion
+Layered architecture: `core/` → `raw.rs` → `lib.rs`. Users get typed API, power users get raw bytes.
 
-**Performance**
-- [ ] SIMD H2 matching (SSE2/NEON) — target: match std::HashMap lookup speed
-- [ ] Prefetch hints (`_mm_prefetch`) for next bucket
-- [ ] Power-of-2 bucket count for bitwise modulo (avoid expensive `%`)
+### Added
 
-**Quality**
-- [ ] `#![no_std]` support (optional)
-- [ ] Miri safety verification
-- [ ] Fuzzing with `cargo-fuzz`
-- [ ] Property-based testing with `proptest`
+**Architecture Refactor**
+- `raw.rs` — `PulseMapRaw` (v0.1.0 PulseMap renamed) — raw `&[u8]` engine
+- `PulseMap` is now a type alias for `PulseMapRaw` (backward compatible)
+- `TypedPulseMap<K, V>` — generic wrapper over PulseMapRaw
+
+**Traits (`PulseKey` / `PulseValue`)**
+- `PulseKey` trait with `to_bytes()` + `from_bytes()` for key serialization
+- `PulseValue` trait with `to_bytes()` + `from_bytes()` for value serialization
+- Built-in impls: `u8`, `u16`, `u32`, `u64`, `i32`, `i64`, `String`, `Vec<u8>`, `[u8; N]`, `bool`
+
+**TypedPulseMap<K, V> API**
+- `insert(K, V)`, `get(&K)→Option<V>`, `peek(&K)→Option<V>`
+- `remove(&K)→bool`, `contains_key(&K)→bool`
+- `iter()→TypedIter<K,V>` — typed iteration over all entries
+
+**Iterator Support (`src/iter.rs`)**
+- `RawIter` — iterates `(&[u8], &[u8])` raw pairs
+- `TypedIter<K, V>` — iterates `(K, V)` with auto-deserialization
+
+**Std Traits**
+- `Debug` — shows len, capacity, load%, evictions
+- `Display` — human-readable `PulseMap(n/cap entries, x% load, y evictions)`
+- `Extend<(K, V)>` — bulk insertion from any iterator
+
+**Zero-Alloc Serialization**
+- `PulseKey`/`PulseValue` traits now use associated type `Bytes`
+- Numeric types (`u32`, `u64`, etc.) return `[u8; N]` on stack — **zero heap allocation**
+- `String`/`Vec<u8>` still use `Vec<u8>` (unavoidable)
+
+**Testing**
+- 28 tests passing (24 unit + 4 doc tests)
+
+### Benchmarks (v0.2.0) — Fair Comparison
+
+**PulseMap vs `lru` crate (SAME CATEGORY — bounded cache with eviction)**
+
+| Benchmark (100K) | PulseMap Typed | `lru` crate | PulseMap wins? |
+|-------------------|:------------:|:-----------:|:--------------:|
+| **INSERT** | **36.3 ms** | 79.3 ms | ✅ **2.2x faster** |
+| **MIXED** | **63.0 ms** | 87.6 ms | ✅ **1.4x faster** |
+| **EVICTION (50K)** | **4.6 ms** | 4.8 ms | ✅ **~same** |
+| LOOKUP | 34.2 ms | **15.1 ms** | ❌ lru 2.3x faster |
+
+**PulseMap vs std::HashMap (DIFFERENT CATEGORY — reference only)**
+
+| Benchmark (100K) | PulseMap Typed | std::HashMap | Note |
+|-------------------|:------------:|:------------:|:----:|
+| INSERT | 36.3 ms | 7.4 ms | std has no eviction |
+| LOOKUP | 34.2 ms | 10.8 ms | std uses SIMD |
+| MIXED | 63.0 ms | 19.5 ms | std uses native types |
 
 ---
 
 ## [v0.3.0] — Planned
 
-### 🔒 Thread Safety + Dynamic Resize
+### ⚡ Performance + SIMD
 
-- [ ] Per-bucket spinlock for concurrent access
-- [ ] `PulseMapSync<K, V>` wrapper with `RwLock` per bucket
-- [ ] Dynamic resizing (grow/shrink with hysteresis)
-- [ ] Slab memory pool with configurable arena size
+- [ ] SIMD H2 matching (SSE2/NEON)
+- [ ] Power-of-2 bucket count (bitwise modulo)
+- [ ] Prefetch hints
+- [ ] `Entry` API
+- [ ] `From<HashMap>` conversion
+- [ ] `#![no_std]` support
 
 ---
 
 ## [v0.4.0] — Planned
 
+### 🔒 Thread Safety + Dynamic Resize
+
+- [ ] Per-bucket spinlock
+- [ ] `PulseMapSync<K, V>`
+- [ ] Dynamic resizing
+
+---
+
+## [v0.5.0] — Planned
+
 ### 🌐 FFI Bindings
 
-- [ ] C FFI via `cbindgen` (`libpulsemap.h`)
-- [ ] Python binding via PyO3 (`pip install pulsemap`)
-- [ ] Java binding via JNI
-- [ ] Node.js binding via napi-rs
+- [ ] C FFI via `cbindgen`
+- [ ] Python via PyO3
+- [ ] Java via JNI
+- [ ] Node.js via napi-rs
+

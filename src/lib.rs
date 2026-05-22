@@ -11,224 +11,34 @@
 //! ```
 //! use pulse_map::PulseMap;
 //!
-//! let mut map = PulseMap::new(1024); // 1024 buckets × 4 slots = 4096 entries
+//! let mut map = PulseMap::new(1024);
 //! map.insert(b"hello", b"world");
 //! assert_eq!(map.get(b"hello"), Some(&b"world"[..]));
 //! map.remove(b"hello");
 //! assert_eq!(map.get(b"hello"), None);
 //! ```
+//!
+//! ## Typed Usage
+//! ```
+//! use pulse_map::TypedPulseMap;
+//!
+//! let mut map = TypedPulseMap::<u32, u64>::new(256);
+//! map.insert(42, 100);
+//! assert_eq!(map.get(&42), Some(100));
+//! ```
 
 mod core;
+mod raw;
+mod iter;
 
+// ── Re-exports ──
 pub use crate::core::meta::MetaWord;
 pub use crate::core::slot::Slot;
 pub use crate::core::bucket::Bucket;
+pub use raw::PulseMapRaw;
+pub use iter::{RawIter, TypedIter};
 
-use crate::core::hash::compute_hash;
-use crate::core::slab::{SlabEntry, SlabPool};
-
-/// A CPU cache-line hash table with zero-cost eviction.
-///
-/// Each bucket is exactly 64 bytes (one cache line) containing:
-/// - 8-byte MetaWord (state + H2 fingerprint + priority for 4 slots)
-/// - 4 × 14-byte Slots (inline key+value or slab pointer)
-///
-/// # Eviction Policy
-/// Hybrid LFU+LRU: 4-bit frequency + 3-bit recency = 7-bit priority per slot.
-/// When a bucket is full, the slot with the lowest priority is evicted.
-/// This decision costs **zero extra cache misses**.
-pub struct PulseMap {
-    buckets: Vec<Bucket>,
-    slab_pool: SlabPool,
-    num_buckets: usize,
-    count: usize,
-    eviction_count: usize,
-}
-
-// Safety: PulseMap uses interior mutability only for priority metadata updates
-// (frequency/recency counters). The actual key-value data is never mutated during get().
-unsafe impl Send for PulseMap {}
-unsafe impl Sync for PulseMap {}
-
-impl PulseMap {
-    /// Create a new PulseMap with the given number of buckets.
-    ///
-    /// Total capacity = `num_buckets × 4` entries.
-    /// Recommended load factor: 60-70% for best hit rate.
-    pub fn new(num_buckets: usize) -> Self {
-        let buckets = vec![Bucket::empty(); num_buckets];
-        Self {
-            buckets,
-            slab_pool: SlabPool::new(),
-            num_buckets,
-            count: 0,
-            eviction_count: 0,
-        }
-    }
-
-    /// Insert a key-value pair. If the bucket is full, evicts the lowest-priority entry.
-    pub fn insert(&mut self, key: &[u8], value: &[u8]) {
-        let hr = compute_hash(key);
-        let bucket_idx = (hr.h1 as usize) % self.num_buckets;
-        let bucket = &mut self.buckets[bucket_idx];
-
-        // 1. Check if key already exists (update in place)
-        let mask = bucket.meta.match_mask(hr.h2);
-        let mut m = mask;
-        while m != 0 {
-            let slot_idx = m.trailing_zeros() as u8;
-            m &= m - 1; // clear lowest bit
-            let slot = &bucket.slots[slot_idx as usize];
-            if slot.matches_key(key, &hr) {
-                // Update value
-                let s = &mut bucket.slots[slot_idx as usize];
-                if key.len() <= 6 && value.len() <= 7 {
-                    s.set_inline(key, value);
-                } else {
-                    let slab = self.slab_pool.alloc(key, value);
-                    s.set_slab(hr.ext_fp_hi, hr.ext_fp, slab);
-                }
-                bucket.meta.on_access(slot_idx);
-                return;
-            }
-        }
-
-        // 2. Find free slot or evict
-        let (target_slot, is_eviction) = if let Some(free) = bucket.meta.find_free_slot() {
-            (free, false)
-        } else if let Some(evict) = bucket.meta.find_evict_target() {
-            // Clean up old slab if needed
-            let old_slot = &bucket.slots[evict as usize];
-            if old_slot.get_mode() == 1 {
-                // Slab mode — pointer is being recycled by arena, no individual free needed
-            }
-            self.eviction_count += 1;
-            (evict, true)
-        } else {
-            return; // Should never happen
-        };
-
-        // 3. Insert into target slot
-        let slot = &mut bucket.slots[target_slot as usize];
-        if key.len() <= 6 && value.len() <= 7 {
-            slot.set_inline(key, value);
-        } else {
-            let slab = self.slab_pool.alloc(key, value);
-            slot.set_slab(hr.ext_fp_hi, hr.ext_fp, slab);
-        }
-
-        bucket.meta.set_state(target_slot, SlotState::Full);
-        bucket.meta.set_h2(target_slot, hr.h2);
-        bucket.meta.on_insert(target_slot);
-
-        if !is_eviction {
-            self.count += 1;
-        }
-    }
-
-    /// Look up a key. Returns the value if found.
-    ///
-    /// This method takes `&self` (not `&mut self`), allowing concurrent reads.
-    /// Priority metadata is updated via interior mutability.
-    pub fn get(&self, key: &[u8]) -> Option<&[u8]> {
-        let hr = compute_hash(key);
-        let bucket_idx = (hr.h1 as usize) % self.num_buckets;
-        let bucket = &self.buckets[bucket_idx];
-
-        let mask = bucket.meta.match_mask(hr.h2);
-        let mut m = mask;
-        while m != 0 {
-            let slot_idx = m.trailing_zeros() as u8;
-            m &= m - 1;
-            let slot = &bucket.slots[slot_idx as usize];
-            if slot.matches_key(key, &hr) {
-                // Safety: only mutating priority counters (frequency/recency),
-                // not key-value data. This is safe for single-threaded use.
-                unsafe {
-                    let bucket_ptr = bucket as *const Bucket as *mut Bucket;
-                    (*bucket_ptr).meta.on_access(slot_idx);
-                }
-                return Some(slot.get_value(&hr));
-            }
-        }
-        None
-    }
-
-    /// Look up a key without updating priority (read-only, immutable).
-    pub fn peek(&self, key: &[u8]) -> Option<&[u8]> {
-        let hr = compute_hash(key);
-        let bucket_idx = (hr.h1 as usize) % self.num_buckets;
-        let bucket = &self.buckets[bucket_idx];
-
-        for slot_idx in 0..4u8 {
-            if bucket.meta.get_state(slot_idx) != SlotState::Full {
-                continue;
-            }
-            if bucket.meta.get_h2(slot_idx) != hr.h2 {
-                continue;
-            }
-            let slot = &bucket.slots[slot_idx as usize];
-            if slot.matches_key(key, &hr) {
-                return Some(slot.get_value(&hr));
-            }
-        }
-        None
-    }
-
-    /// Remove a key. Returns true if the key was found and removed.
-    pub fn remove(&mut self, key: &[u8]) -> bool {
-        let hr = compute_hash(key);
-        let bucket_idx = (hr.h1 as usize) % self.num_buckets;
-        let bucket = &mut self.buckets[bucket_idx];
-
-        for slot_idx in 0..4u8 {
-            if bucket.meta.get_state(slot_idx) != SlotState::Full {
-                continue;
-            }
-            if bucket.meta.get_h2(slot_idx) != hr.h2 {
-                continue;
-            }
-            let slot = &bucket.slots[slot_idx as usize];
-            if slot.matches_key(key, &hr) {
-                bucket.meta.set_state(slot_idx, SlotState::Tombstone);
-                bucket.slots[slot_idx as usize].clear();
-                self.count -= 1;
-                return true;
-            }
-        }
-        false
-    }
-
-    /// Number of entries currently stored.
-    #[inline]
-    pub fn len(&self) -> usize {
-        self.count
-    }
-
-    /// Whether the map is empty.
-    #[inline]
-    pub fn is_empty(&self) -> bool {
-        self.count == 0
-    }
-
-    /// Total capacity (num_buckets × 4).
-    #[inline]
-    pub fn capacity(&self) -> usize {
-        self.num_buckets * 4
-    }
-
-    /// Current load factor (0.0 to 1.0).
-    #[inline]
-    pub fn load_factor(&self) -> f64 {
-        self.count as f64 / self.capacity() as f64
-    }
-
-    /// Number of evictions that have occurred.
-    #[inline]
-    pub fn eviction_count(&self) -> usize {
-        self.eviction_count
-    }
-}
+// ── SlotState (shared by core and raw) ──
 
 /// Slot state in the metadata word.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -242,7 +52,7 @@ pub enum SlotState {
 
 impl SlotState {
     #[inline]
-    fn from_bits(bits: u8) -> Self {
+    pub(crate) fn from_bits(bits: u8) -> Self {
         match bits & 0x03 {
             0 => SlotState::Empty,
             1 => SlotState::Full,
@@ -253,12 +63,299 @@ impl SlotState {
     }
 }
 
+// ═══════════════════════════════════════════════════════════════
+// PulseMap — Raw byte API (backward compatible with v0.1.0)
+// ═══════════════════════════════════════════════════════════════
+
+/// A CPU cache-line hash table with zero-cost eviction.
+///
+/// This is the raw `&[u8]` API. For typed access, use [`TypedPulseMap`].
+///
+/// # Example
+/// ```
+/// use pulse_map::PulseMap;
+///
+/// let mut map = PulseMap::new(16);
+/// map.insert(b"key", b"value");
+/// assert_eq!(map.get(b"key"), Some(&b"value"[..]));
+/// ```
+pub type PulseMap = PulseMapRaw;
+
+// ═══════════════════════════════════════════════════════════════
+// PulseKey / PulseValue — Traits for typed access
+// ═══════════════════════════════════════════════════════════════
+
+/// Trait for types that can be used as PulseMap keys.
+///
+/// Uses associated type `Bytes` to avoid heap allocation for fixed-size types.
+/// Example: `u32::to_bytes()` returns `[u8; 4]` on the stack — zero heap alloc.
+pub trait PulseKey: Sized {
+    /// Byte representation type. `[u8; N]` for fixed-size, `Vec<u8>` for dynamic.
+    type Bytes: AsRef<[u8]>;
+    /// Serialize to bytes (zero-alloc for numeric types).
+    fn to_bytes(&self) -> Self::Bytes;
+    /// Deserialize from bytes.
+    fn from_bytes(bytes: &[u8]) -> Option<Self>;
+}
+
+/// Trait for types that can be used as PulseMap values.
+///
+/// Same zero-alloc design as `PulseKey`.
+pub trait PulseValue: Sized {
+    /// Byte representation type.
+    type Bytes: AsRef<[u8]>;
+    /// Serialize to bytes (zero-alloc for numeric types).
+    fn to_bytes(&self) -> Self::Bytes;
+    /// Deserialize from bytes.
+    fn from_bytes(bytes: &[u8]) -> Option<Self>;
+}
+
+// ── Built-in PulseKey implementations ──
+
+impl PulseKey for u8 {
+    type Bytes = [u8; 1];
+    fn to_bytes(&self) -> [u8; 1] { [*self] }
+    fn from_bytes(b: &[u8]) -> Option<Self> { b.first().copied() }
+}
+
+impl PulseKey for u16 {
+    type Bytes = [u8; 2];
+    fn to_bytes(&self) -> [u8; 2] { self.to_le_bytes() }
+    fn from_bytes(b: &[u8]) -> Option<Self> { b.try_into().ok().map(u16::from_le_bytes) }
+}
+
+impl PulseKey for u32 {
+    type Bytes = [u8; 4];
+    fn to_bytes(&self) -> [u8; 4] { self.to_le_bytes() }
+    fn from_bytes(b: &[u8]) -> Option<Self> { b.try_into().ok().map(u32::from_le_bytes) }
+}
+
+impl PulseKey for u64 {
+    type Bytes = [u8; 8];
+    fn to_bytes(&self) -> [u8; 8] { self.to_le_bytes() }
+    fn from_bytes(b: &[u8]) -> Option<Self> { b.try_into().ok().map(u64::from_le_bytes) }
+}
+
+impl PulseKey for i32 {
+    type Bytes = [u8; 4];
+    fn to_bytes(&self) -> [u8; 4] { self.to_le_bytes() }
+    fn from_bytes(b: &[u8]) -> Option<Self> { b.try_into().ok().map(i32::from_le_bytes) }
+}
+
+impl PulseKey for i64 {
+    type Bytes = [u8; 8];
+    fn to_bytes(&self) -> [u8; 8] { self.to_le_bytes() }
+    fn from_bytes(b: &[u8]) -> Option<Self> { b.try_into().ok().map(i64::from_le_bytes) }
+}
+
+impl PulseKey for String {
+    type Bytes = Vec<u8>;
+    fn to_bytes(&self) -> Vec<u8> { self.as_bytes().to_vec() }
+    fn from_bytes(b: &[u8]) -> Option<Self> { std::str::from_utf8(b).ok().map(String::from) }
+}
+
+impl PulseKey for Vec<u8> {
+    type Bytes = Vec<u8>;
+    fn to_bytes(&self) -> Vec<u8> { self.clone() }
+    fn from_bytes(b: &[u8]) -> Option<Self> { Some(b.to_vec()) }
+}
+
+impl<const N: usize> PulseKey for [u8; N] {
+    type Bytes = [u8; N];
+    fn to_bytes(&self) -> [u8; N] { *self }
+    fn from_bytes(b: &[u8]) -> Option<Self> { b.try_into().ok() }
+}
+
+// ── Built-in PulseValue implementations ──
+
+impl PulseValue for u8 {
+    type Bytes = [u8; 1];
+    fn to_bytes(&self) -> [u8; 1] { [*self] }
+    fn from_bytes(b: &[u8]) -> Option<Self> { b.first().copied() }
+}
+
+impl PulseValue for u16 {
+    type Bytes = [u8; 2];
+    fn to_bytes(&self) -> [u8; 2] { self.to_le_bytes() }
+    fn from_bytes(b: &[u8]) -> Option<Self> { b.try_into().ok().map(u16::from_le_bytes) }
+}
+
+impl PulseValue for u32 {
+    type Bytes = [u8; 4];
+    fn to_bytes(&self) -> [u8; 4] { self.to_le_bytes() }
+    fn from_bytes(b: &[u8]) -> Option<Self> { b.try_into().ok().map(u32::from_le_bytes) }
+}
+
+impl PulseValue for u64 {
+    type Bytes = [u8; 8];
+    fn to_bytes(&self) -> [u8; 8] { self.to_le_bytes() }
+    fn from_bytes(b: &[u8]) -> Option<Self> { b.try_into().ok().map(u64::from_le_bytes) }
+}
+
+impl PulseValue for i32 {
+    type Bytes = [u8; 4];
+    fn to_bytes(&self) -> [u8; 4] { self.to_le_bytes() }
+    fn from_bytes(b: &[u8]) -> Option<Self> { b.try_into().ok().map(i32::from_le_bytes) }
+}
+
+impl PulseValue for i64 {
+    type Bytes = [u8; 8];
+    fn to_bytes(&self) -> [u8; 8] { self.to_le_bytes() }
+    fn from_bytes(b: &[u8]) -> Option<Self> { b.try_into().ok().map(i64::from_le_bytes) }
+}
+
+impl PulseValue for String {
+    type Bytes = Vec<u8>;
+    fn to_bytes(&self) -> Vec<u8> { self.as_bytes().to_vec() }
+    fn from_bytes(b: &[u8]) -> Option<Self> { std::str::from_utf8(b).ok().map(String::from) }
+}
+
+impl PulseValue for Vec<u8> {
+    type Bytes = Vec<u8>;
+    fn to_bytes(&self) -> Vec<u8> { self.clone() }
+    fn from_bytes(b: &[u8]) -> Option<Self> { Some(b.to_vec()) }
+}
+
+impl PulseValue for bool {
+    type Bytes = [u8; 1];
+    fn to_bytes(&self) -> [u8; 1] { [*self as u8] }
+    fn from_bytes(b: &[u8]) -> Option<Self> { b.first().map(|&v| v != 0) }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// TypedPulseMap<K, V> — Generic wrapper over PulseMapRaw
+// ═══════════════════════════════════════════════════════════════
+
+/// A typed cache-line hash table with zero-cost eviction.
+///
+/// Wraps [`PulseMapRaw`] with type-safe key/value serialization.
+///
+/// # Example
+/// ```
+/// use pulse_map::TypedPulseMap;
+///
+/// let mut map = TypedPulseMap::<u32, u64>::new(256);
+/// map.insert(42, 100);
+/// assert_eq!(map.get(&42), Some(100));
+/// map.remove(&42);
+/// assert_eq!(map.get(&42), None);
+/// ```
+pub struct TypedPulseMap<K: PulseKey, V: PulseValue> {
+    raw: PulseMapRaw,
+    _marker: std::marker::PhantomData<(K, V)>,
+}
+
+impl<K: PulseKey, V: PulseValue> TypedPulseMap<K, V> {
+    /// Create a new TypedPulseMap with the given number of buckets.
+    pub fn new(num_buckets: usize) -> Self {
+        Self {
+            raw: PulseMapRaw::new(num_buckets),
+            _marker: std::marker::PhantomData,
+        }
+    }
+
+    /// Insert a key-value pair.
+    pub fn insert(&mut self, key: K, value: V) {
+        let kb = key.to_bytes();
+        let vb = value.to_bytes();
+        self.raw.insert(kb.as_ref(), vb.as_ref());
+    }
+
+    /// Look up a key. Returns the deserialized value if found.
+    pub fn get(&self, key: &K) -> Option<V> {
+        let kb = key.to_bytes();
+        self.raw.get(kb.as_ref()).and_then(|vb| V::from_bytes(vb))
+    }
+
+    /// Look up without updating priority.
+    pub fn peek(&self, key: &K) -> Option<V> {
+        let kb = key.to_bytes();
+        self.raw.peek(kb.as_ref()).and_then(|vb| V::from_bytes(vb))
+    }
+
+    /// Remove a key.
+    pub fn remove(&mut self, key: &K) -> bool {
+        let kb = key.to_bytes();
+        self.raw.remove(kb.as_ref())
+    }
+
+    /// Check if a key exists.
+    pub fn contains_key(&self, key: &K) -> bool {
+        let kb = key.to_bytes();
+        self.raw.peek(kb.as_ref()).is_some()
+    }
+
+    /// Iterate over all (key, value) pairs.
+    pub fn iter(&self) -> TypedIter<'_, K, V> {
+        TypedIter::new(&self.raw)
+    }
+
+    #[inline]
+    pub fn len(&self) -> usize { self.raw.len() }
+
+    #[inline]
+    pub fn is_empty(&self) -> bool { self.raw.is_empty() }
+
+    #[inline]
+    pub fn capacity(&self) -> usize { self.raw.capacity() }
+
+    #[inline]
+    pub fn load_factor(&self) -> f64 { self.raw.load_factor() }
+
+    #[inline]
+    pub fn eviction_count(&self) -> usize { self.raw.eviction_count() }
+}
+
+// ── Debug trait ──
+
+impl<K: PulseKey + std::fmt::Debug, V: PulseValue + std::fmt::Debug> std::fmt::Debug for TypedPulseMap<K, V> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TypedPulseMap")
+            .field("len", &self.len())
+            .field("capacity", &self.capacity())
+            .field("load_factor", &format!("{:.1}%", self.load_factor() * 100.0))
+            .field("evictions", &self.eviction_count())
+            .finish()
+    }
+}
+
+// ── Display trait ──
+
+impl<K: PulseKey, V: PulseValue> std::fmt::Display for TypedPulseMap<K, V> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "PulseMap({}/{} entries, {:.1}% load, {} evictions)",
+            self.len(),
+            self.capacity(),
+            self.load_factor() * 100.0,
+            self.eviction_count()
+        )
+    }
+}
+
+// ── Extend trait ──
+
+impl<K: PulseKey, V: PulseValue> Extend<(K, V)> for TypedPulseMap<K, V> {
+    fn extend<I: IntoIterator<Item = (K, V)>>(&mut self, iter: I) {
+        for (k, v) in iter {
+            self.insert(k, v);
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Tests
+// ═══════════════════════════════════════════════════════════════
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    // ── Raw API tests (backward compat) ──
+
     #[test]
-    fn test_insert_and_get() {
+    fn test_raw_insert_and_get() {
         let mut map = PulseMap::new(16);
         map.insert(b"hello", b"world");
         assert_eq!(map.get(b"hello"), Some(&b"world"[..]));
@@ -266,13 +363,13 @@ mod tests {
     }
 
     #[test]
-    fn test_get_missing() {
-        let mut map = PulseMap::new(16);
+    fn test_raw_get_missing() {
+        let map = PulseMap::new(16);
         assert_eq!(map.get(b"nope"), None);
     }
 
     #[test]
-    fn test_update_existing() {
+    fn test_raw_update_existing() {
         let mut map = PulseMap::new(16);
         map.insert(b"key", b"val1");
         map.insert(b"key", b"val2");
@@ -281,7 +378,7 @@ mod tests {
     }
 
     #[test]
-    fn test_remove() {
+    fn test_raw_remove() {
         let mut map = PulseMap::new(16);
         map.insert(b"key", b"val");
         assert!(map.remove(b"key"));
@@ -290,43 +387,36 @@ mod tests {
     }
 
     #[test]
-    fn test_remove_missing() {
+    fn test_raw_remove_missing() {
         let mut map = PulseMap::new(16);
         assert!(!map.remove(b"nope"));
     }
 
     #[test]
-    fn test_many_inserts() {
+    fn test_raw_many_inserts() {
         let mut map = PulseMap::new(1024);
         for i in 0u32..1000 {
-            let key = i.to_le_bytes();
-            let val = (i * 2).to_le_bytes();
-            map.insert(&key, &val);
+            map.insert(&i.to_le_bytes(), &(i * 2).to_le_bytes());
         }
-        // At least some should be findable
         let mut hits = 0;
         for i in 0u32..1000 {
-            let key = i.to_le_bytes();
-            if map.get(&key).is_some() {
-                hits += 1;
-            }
+            if map.get(&i.to_le_bytes()).is_some() { hits += 1; }
         }
         assert!(hits > 500, "Expected >500 hits, got {}", hits);
     }
 
     #[test]
-    fn test_eviction_happens() {
-        let mut map = PulseMap::new(4); // 16 slots only
+    fn test_raw_eviction() {
+        let mut map = PulseMap::new(4);
         for i in 0u32..100 {
-            let key = i.to_le_bytes();
-            map.insert(&key, b"val");
+            map.insert(&i.to_le_bytes(), b"val");
         }
         assert!(map.eviction_count() > 0);
         assert!(map.len() <= 16);
     }
 
     #[test]
-    fn test_slab_mode() {
+    fn test_raw_slab_mode() {
         let mut map = PulseMap::new(16);
         let long_key = b"this_is_a_very_long_key_that_exceeds_six_bytes";
         let long_val = b"this_is_a_very_long_value_that_also_exceeds_seven_bytes";
@@ -335,7 +425,7 @@ mod tests {
     }
 
     #[test]
-    fn test_load_factor() {
+    fn test_raw_load_factor() {
         let mut map = PulseMap::new(100);
         assert_eq!(map.capacity(), 400);
         for i in 0u32..200 {
@@ -346,14 +436,90 @@ mod tests {
     }
 
     #[test]
-    fn test_peek_no_priority_update() {
-        let map_const = PulseMap::new(16);
-        // peek on empty should return None
-        assert_eq!(map_const.peek(b"key"), None);
+    fn test_raw_peek() {
+        let map = PulseMap::new(16);
+        assert_eq!(map.peek(b"key"), None);
     }
 
     #[test]
     fn test_bucket_size() {
         assert_eq!(std::mem::size_of::<Bucket>(), 64, "Bucket must be exactly 64 bytes");
+    }
+
+    // ── Typed API tests ──
+
+    #[test]
+    fn test_typed_u32_u64() {
+        let mut map = TypedPulseMap::<u32, u64>::new(16);
+        map.insert(42, 100);
+        assert_eq!(map.get(&42), Some(100));
+        assert_eq!(map.len(), 1);
+    }
+
+    #[test]
+    fn test_typed_string() {
+        let mut map = TypedPulseMap::<String, String>::new(16);
+        map.insert("hello".to_string(), "world".to_string());
+        assert_eq!(map.get(&"hello".to_string()), Some("world".to_string()));
+    }
+
+    #[test]
+    fn test_typed_remove() {
+        let mut map = TypedPulseMap::<u32, u32>::new(16);
+        map.insert(1, 10);
+        assert!(map.remove(&1));
+        assert_eq!(map.get(&1), None);
+    }
+
+    #[test]
+    fn test_typed_contains_key() {
+        let mut map = TypedPulseMap::<u32, u32>::new(16);
+        map.insert(5, 50);
+        assert!(map.contains_key(&5));
+        assert!(!map.contains_key(&6));
+    }
+
+    #[test]
+    fn test_typed_extend() {
+        let mut map = TypedPulseMap::<u32, u32>::new(16);
+        map.extend(vec![(1, 10), (2, 20), (3, 30)]);
+        assert_eq!(map.len(), 3);
+        assert_eq!(map.get(&2), Some(20));
+    }
+
+    #[test]
+    fn test_typed_debug() {
+        let mut map = TypedPulseMap::<u32, u32>::new(16);
+        map.insert(1, 10);
+        let debug = format!("{:?}", map);
+        assert!(debug.contains("TypedPulseMap"));
+        assert!(debug.contains("len"));
+    }
+
+    #[test]
+    fn test_typed_display() {
+        let mut map = TypedPulseMap::<u32, u32>::new(16);
+        map.insert(1, 10);
+        let display = format!("{}", map);
+        assert!(display.contains("PulseMap("));
+    }
+
+    #[test]
+    fn test_typed_eviction() {
+        let mut map = TypedPulseMap::<u32, u32>::new(4);
+        for i in 0..100u32 {
+            map.insert(i, i * 10);
+        }
+        assert!(map.eviction_count() > 0);
+    }
+
+    #[test]
+    fn test_typed_iterator() {
+        let mut map = TypedPulseMap::<u32, u32>::new(256);
+        map.insert(1, 10);
+        map.insert(2, 20);
+        map.insert(3, 30);
+        let collected: Vec<(u32, u32)> = map.iter().collect();
+        assert_eq!(collected.len(), 3);
     }
 }
