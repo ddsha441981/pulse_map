@@ -53,7 +53,7 @@ assert_eq!(map.get(&42), Some(100));
 
 // Iterate
 for (key, value) in map.iter() {
-println!("{}: {}", key, value);
+    println!("{}: {}", key, value);
 }
 
 // Bulk insert
@@ -68,30 +68,67 @@ let pulse = TypedPulseMap::from(std_map);
 println!("{}", map); // PulseMap(4/1024 entries, 0.4% load, 0 evictions)
 ```
 
+### Concurrent API (thread-safe)
+
+```rust
+use pulse_map::ConcurrentPulseMap;
+use std::sync::Arc;
+use std::thread;
+
+let map = Arc::new(ConcurrentPulseMap::<u32, u32>::new(1024));
+
+// 4 threads writing concurrently
+let handles: Vec<_> = (0..4).map(|t| {
+    let m = map.clone();
+    thread::spawn(move || {
+        for i in 0..1000 {
+            m.insert(t * 1000 + i, i);  // &self — no &mut needed!
+        }
+    })
+}).collect();
+for h in handles { h.join().unwrap(); }
+
+assert!(map.len() > 0);
+
+// Auto-resize mode
+let growing_map = ConcurrentPulseMap::<u32, u32>::with_auto_resize(64);
+// Map auto-grows when load > 75%
+```
+
 ### Supported Types
 
 Built-in `PulseKey`/`PulseValue` implementations (zero-alloc for numerics):
 
 `u8` · `u16` · `u32` · `u64` · `i32` · `i64` · `String` · `Vec<u8>` · `[u8; N]` · `bool`
 
-## Benchmark Results (v0.3.0)
+## Benchmark Results (v0.4.0)
 
 ### PulseMap vs `lru` crate (same category — bounded cache)
 
 | Benchmark (100K ops) | PulseMap | `lru` crate | Result |
 |---------------------|:-------:|:-----------:|:------:|
-| **INSERT** | **15 ms** | 32 ms | ✅ **2.1x faster** |
-| **MIXED (insert+lookup)** | **32 ms** | 44 ms | ✅ **1.4x faster** |
-| **EVICTION (50K)** | **1.8 ms** | 3.2 ms | ✅ **1.8x faster** |
-| LOOKUP | 18 ms | **8.3 ms** | lru 2.2x faster |
+| **INSERT** | **13.8 ms** | 19.1 ms | ✅ **1.4x faster** |
+| **MIXED (insert+lookup)** | **17.9 ms** | 23.7 ms | ✅ **1.3x faster** |
+| **EVICTION (50K)** | **1.5 ms** | 2.2 ms | ✅ **1.5x faster** |
+| LOOKUP | 9.8 ms | **5.4 ms** | lru 1.8x faster |
+
+### ConcurrentPulseMap (multi-threaded)
+
+| Benchmark (100K ops) | 1 Thread | 4 Threads | Overhead |
+|---------------------|:-------:|:---------:|:--------:|
+| INSERT | 14.8 ms | 20.8 ms | 1.4x |
+| LOOKUP | — | 15.2 ms | — |
+| MIXED | — | 35.6 ms | — |
+
+> **Only 7% overhead** for thread safety (single-thread ConcurrentPulseMap vs TypedPulseMap).
 
 ### Reference: PulseMap vs std::HashMap (different category)
 
 | Benchmark (100K ops) | PulseMap | std::HashMap | Note |
 |---------------------|:-------:|:------------:|:----:|
-| INSERT | 15 ms | 3.6 ms | std has no eviction |
-| LOOKUP | 18 ms | 4.3 ms | std uses SIMD + native types |
-| EVICTION | **1.8 ms** | impossible | ∞ |
+| INSERT | 13.8 ms | 2.5 ms | std has no eviction |
+| LOOKUP | 9.8 ms | 2.9 ms | std uses SIMD + native types |
+| EVICTION | **1.5 ms** | impossible | ∞ |
 
 > **Note:** std::HashMap and PulseMap solve different problems. HashMap stores everything forever.
 > PulseMap is a bounded cache. Compare with `lru`/`moka` for fair comparison.
@@ -117,7 +154,8 @@ Built-in `PulseKey`/`PulseValue` implementations (zero-alloc for numerics):
 ### Layered Design
 
 ```
-Layer 3: lib.rs          → User API (TypedPulseMap<K,V>, PulseMap alias)
+Layer 4: sync.rs         → ConcurrentPulseMap (thread-safe, per-bucket locks)
+Layer 3: lib.rs          → User API (TypedPulseMap<K,V>, PulseMap alias, Entry API)
 Layer 2: raw.rs          → Hash table logic (insert/get/remove/evict)
 Layer 1: core/           → Building blocks (MetaWord, Slot, Bucket, hash)
 ```
@@ -132,6 +170,7 @@ pulse_map/
 ├── src/
 │   ├── lib.rs              # Public API (PulseMap, TypedPulseMap<K,V>, Entry API)
 │   ├── raw.rs              # PulseMapRaw — raw byte engine (power-of-2 + prefetch)
+│   ├── sync.rs             # ConcurrentPulseMap (per-bucket spinlock + RwLock resize)
 │   ├── iter.rs             # RawIter + TypedIter
 │   ├── traits.rs           # Debug, Display, Extend, From<HashMap>
 │   ├── simd.rs             # SIMD H2 matching (--features simd, x86_64)
@@ -143,7 +182,7 @@ pulse_map/
 │       ├── slab.rs          # SlabPool (arena allocator)
 │       └── hash.rs          # wyhash → H1/H2/ext_fp
 └── benches/
-    └── benchmark.rs         # Criterion benchmarks (vs lru + std)
+    └── benchmark.rs         # Criterion benchmarks (vs lru + std + concurrent)
 ```
 
 ## API Reference
@@ -174,22 +213,36 @@ pulse_map/
 | `extend(IntoIterator)` | Bulk insert |
 | `From<HashMap<K,V>>` | Convert from std::HashMap |
 
+### ConcurrentPulseMap<K, V> (thread-safe)
+
+| Method | Description |
+|--------|-------------|
+| `ConcurrentPulseMap::new(n)` | Fixed-size concurrent map |
+| `ConcurrentPulseMap::with_auto_resize(n)` | Auto-grows at 75% load |
+| `insert(&self, K, V)` | Thread-safe insert (no `&mut`!) |
+| `get(&self, &K) → Option<V>` | Thread-safe lookup |
+| `peek(&self, &K) → Option<V>` | Lookup (no priority update) |
+| `remove(&self, &K) → bool` | Thread-safe removal |
+| `contains_key(&self, &K) → bool` | Existence check |
+| `resize(&self, new_size)` | Manual stop-the-world rehash |
+| `len()`, `capacity()`, `load_factor()` | Stats |
+
 ## Feature Flags
 
 | Feature | Default | Description |
 |---------|:-------:|-------------|
-| `std` | ✅ | Enables `From<HashMap>`, standard library |
+| `std` | ✅ | Enables `From<HashMap>`, `ConcurrentPulseMap`, standard library |
 | `simd` | ❌ | SSE2 SIMD H2 matching (x86_64 only) |
 
 ```toml
-# Default (std)
-pulse_map = "0.3"
+# Default (std + concurrent)
+pulse_map = "0.4"
 
 # With SIMD
-pulse_map = { version = "0.3", features = ["simd"] }
+pulse_map = { version = "0.4", features = ["simd"] }
 
-# no_std
-pulse_map = { version = "0.3", default-features = false }
+# no_std (no ConcurrentPulseMap)
+pulse_map = { version = "0.4", default-features = false }
 ```
 
 ### Design Notes

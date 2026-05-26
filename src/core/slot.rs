@@ -160,4 +160,26 @@ impl Slot {
             self.slab_entry().value()
         }
     }
+
+    /// Get key bytes from this slot (inline or slab).
+    /// Used by resize/rehash operations.
+    #[inline]
+    pub fn get_key_bytes(&self) -> &[u8] {
+        if self.get_mode() == 0 {
+            self.inline_key()
+        } else {
+            self.slab_entry().key()
+        }
+    }
+
+    /// Get value bytes from this slot (inline or slab).
+    /// Used by resize/rehash operations.
+    #[inline]
+    pub fn get_value_bytes(&self) -> &[u8] {
+        if self.get_mode() == 0 {
+            self.inline_value()
+        } else {
+            self.slab_entry().value()
+        }
+    }
 }
