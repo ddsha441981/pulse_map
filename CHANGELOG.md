@@ -136,15 +136,61 @@ Implementing `Index` would require either:
 
 ---
 
-## [v0.3.0] — Planned
+## [v0.3.0] — 2026-05-26
 
-### ⚡ Performance + SIMD
+### ⚡ Performance + SIMD + Entry API + no_std
 
-- [ ] SIMD H2 matching (SSE2/NEON)
-- [ ] Power-of-2 bucket count (bitwise modulo)
-- [ ] Prefetch hints
-- [ ] `Entry` API
-- [ ] `#![no_std]` support
+**2x overall speedup.** Power-of-2 buckets, branchless H2 matching, SIMD support, and prefetch hints.
+
+### Added
+
+**Power-of-2 Bucket Count (`raw.rs`)**
+- `num_buckets` auto-rounded to next power of 2
+- `% num_buckets` → `& bucket_mask` — modulo replaced with bitwise AND
+- Applied across all 4 hot paths: `insert()`, `get()`, `peek()`, `remove()`
+
+**SIMD H2 Matching (`simd.rs`)**
+- SSE2 `_mm_cmpeq_epi8` + `_mm_movemask_epi8` for parallel H2 comparison
+- Behind `--features simd` flag (x86_64 only)
+- Default scalar path uses branchless bit arithmetic (`meta.rs`)
+
+**Prefetch Hints (`raw.rs`)**
+- `_mm_prefetch` in `get()` — preloads bucket into L1 cache before access
+
+**Entry API (`lib.rs`)**
+- `map.entry(key).or_insert(value)` — insert if vacant
+- `map.entry(key).or_insert_with(|| compute())` — lazy insert
+- `map.entry(key).and_modify(|v| *v += 1).or_insert(0)` — modify-or-insert
+- `OccupiedEntry`: `get()`, `key()`, `insert()`, `remove()`
+- `VacantEntry`: `key()`, `insert()`
+
+**`#![no_std]` Support**
+- `default = ["std"]` — backward compatible
+- `default-features = false` enables `no_std` with `alloc`
+- `From<HashMap>` gated behind `#[cfg(feature = "std")]`
+
+**Testing**
+- 35 tests passing (30 unit + 5 doc tests)
+
+### Benchmarks (v0.3.0)
+
+**v0.2.0 → v0.3.0 Speedup**
+
+| Benchmark (100K) | v0.2.0 | v0.3.0 | Speedup |
+|---|:---:|:---:|:---:|
+| INSERT | 36 ms | **15 ms** | **2.4x faster** |
+| LOOKUP | 34 ms | **18 ms** | **1.9x faster** |
+| MIXED | 63 ms | **32 ms** | **2.0x faster** |
+| EVICTION | 4.6 ms | **1.8 ms** | **2.6x faster** |
+
+**PulseMap vs `lru` crate (same category)**
+
+| Benchmark (100K) | PulseMap | `lru` | Result |
+|---|:---:|:---:|:---:|
+| **INSERT** | **15 ms** | 32 ms | ✅ **2.1x faster** |
+| **MIXED** | **32 ms** | 44 ms | ✅ **1.4x faster** |
+| **EVICTION** | **1.8 ms** | 3.2 ms | ✅ **1.8x faster** |
+| LOOKUP | 18 ms | **8.3 ms** | ❌ lru 2.2x faster |
 
 ---
 
@@ -166,4 +212,5 @@ Implementing `Index` would require either:
 - [ ] Python via PyO3
 - [ ] Java via JNI
 - [ ] Node.js via napi-rs
+
 

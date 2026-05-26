@@ -16,6 +16,7 @@ pub struct PulseMapRaw {
     pub(crate) buckets: Vec<Bucket>,
     slab_pool: SlabPool,
     num_buckets: usize,
+    bucket_mask: usize,
     count: usize,
     eviction_count: usize,
 }
@@ -28,13 +29,16 @@ unsafe impl Sync for PulseMapRaw {}
 impl PulseMapRaw {
     /// Create a new PulseMapRaw with the given number of buckets.
     ///
-    /// Total capacity = `num_buckets × 4` entries.
+    /// `num_buckets` is rounded up to the next power of 2 for fast bitwise indexing.
+    /// Total capacity = `actual_buckets × 4` entries.
     pub fn new(num_buckets: usize) -> Self {
-        let buckets = vec![Bucket::empty(); num_buckets];
+        let actual = num_buckets.max(1).next_power_of_two();
+        let buckets = vec![Bucket::empty(); actual];
         Self {
             buckets,
             slab_pool: SlabPool::new(),
-            num_buckets,
+            num_buckets: actual,
+            bucket_mask: actual - 1,
             count: 0,
             eviction_count: 0,
         }
@@ -43,7 +47,7 @@ impl PulseMapRaw {
     /// Insert a raw key-value pair. Evicts lowest-priority entry on full bucket.
     pub fn insert(&mut self, key: &[u8], value: &[u8]) {
         let hr = compute_hash(key);
-        let bucket_idx = (hr.h1 as usize) % self.num_buckets;
+        let bucket_idx = (hr.h1 as usize) & self.bucket_mask;
         let bucket = &mut self.buckets[bucket_idx];
 
         // 1. Check if key already exists (update in place)
@@ -101,7 +105,15 @@ impl PulseMapRaw {
     /// Look up a key. Returns the value bytes if found.
     pub fn get(&self, key: &[u8]) -> Option<&[u8]> {
         let hr = compute_hash(key);
-        let bucket_idx = (hr.h1 as usize) % self.num_buckets;
+        let bucket_idx = (hr.h1 as usize) & self.bucket_mask;
+
+        // Prefetch bucket into L1 cache before access
+        #[cfg(target_arch = "x86_64")]
+        unsafe {
+            let ptr = self.buckets.as_ptr().add(bucket_idx) as *const i8;
+            std::arch::x86_64::_mm_prefetch(ptr, std::arch::x86_64::_MM_HINT_T0);
+        }
+
         let bucket = &self.buckets[bucket_idx];
 
         let mask = bucket.meta.match_mask(hr.h2);
@@ -124,7 +136,7 @@ impl PulseMapRaw {
     /// Look up without updating priority.
     pub fn peek(&self, key: &[u8]) -> Option<&[u8]> {
         let hr = compute_hash(key);
-        let bucket_idx = (hr.h1 as usize) % self.num_buckets;
+        let bucket_idx = (hr.h1 as usize) & self.bucket_mask;
         let bucket = &self.buckets[bucket_idx];
 
         for slot_idx in 0..4u8 {
@@ -145,7 +157,7 @@ impl PulseMapRaw {
     /// Remove a key. Returns true if found and removed.
     pub fn remove(&mut self, key: &[u8]) -> bool {
         let hr = compute_hash(key);
-        let bucket_idx = (hr.h1 as usize) % self.num_buckets;
+        let bucket_idx = (hr.h1 as usize) & self.bucket_mask;
         let bucket = &mut self.buckets[bucket_idx];
 
         for slot_idx in 0..4u8 {

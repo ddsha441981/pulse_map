@@ -71,15 +71,43 @@ impl MetaWord {
     // ── Branchless scanning ──
 
     /// Returns a bitmask of slots where H2 matches AND state == Full.
-    /// Bit i set = slot i is a potential match. Check at most 2-3 slots.
+    /// Bit i set = slot i is a potential match.
+    ///
+    /// Dispatches to SIMD (simd.rs) when `simd` feature is enabled on x86_64.
     #[inline]
     pub fn match_mask(&self, h2: u8) -> u8 {
+        #[cfg(all(target_arch = "x86_64", feature = "simd"))]
+        {
+            // Safety: SSE2 is guaranteed on all x86_64 CPUs
+            unsafe { crate::simd::match_mask_simd(self.0, h2) }
+        }
+        #[cfg(not(all(target_arch = "x86_64", feature = "simd")))]
+        {
+            self.match_mask_branchless(h2)
+        }
+    }
+
+    /// Branchless scalar match — no if-statements, pure bit arithmetic.
+    #[inline]
+    fn match_mask_branchless(&self, h2: u8) -> u8 {
+        let v = self.0;
+        let h2 = h2 & 0x7F;
         let mut mask: u8 = 0;
-        // Unrolled, compiler will vectorize this
-        if self.get_state(0) == SlotState::Full && self.get_h2(0) == h2 { mask |= 1; }
-        if self.get_state(1) == SlotState::Full && self.get_h2(1) == h2 { mask |= 2; }
-        if self.get_state(2) == SlotState::Full && self.get_h2(2) == h2 { mask |= 4; }
-        if self.get_state(3) == SlotState::Full && self.get_h2(3) == h2 { mask |= 8; }
+
+        let s0 = ((v >> 56) & 0x03) as u8;
+        let s1 = ((v >> 58) & 0x03) as u8;
+        let s2 = ((v >> 60) & 0x03) as u8;
+        let s3 = ((v >> 62) & 0x03) as u8;
+
+        let h0 = ((v >> 28) & 0x7F) as u8;
+        let h1 = ((v >> 35) & 0x7F) as u8;
+        let h2_2 = ((v >> 42) & 0x7F) as u8;
+        let h3 = ((v >> 49) & 0x7F) as u8;
+
+        mask |= (s0 == 1) as u8 & (h0 == h2) as u8;
+        mask |= ((s1 == 1) as u8 & (h1 == h2) as u8) << 1;
+        mask |= ((s2 == 1) as u8 & (h2_2 == h2) as u8) << 2;
+        mask |= ((s3 == 1) as u8 & (h3 == h2) as u8) << 3;
         mask
     }
 

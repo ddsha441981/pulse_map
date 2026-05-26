@@ -53,7 +53,7 @@ assert_eq!(map.get(&42), Some(100));
 
 // Iterate
 for (key, value) in map.iter() {
-    println!("{}: {}", key, value);
+println!("{}: {}", key, value);
 }
 
 // Bulk insert
@@ -74,24 +74,24 @@ Built-in `PulseKey`/`PulseValue` implementations (zero-alloc for numerics):
 
 `u8` · `u16` · `u32` · `u64` · `i32` · `i64` · `String` · `Vec<u8>` · `[u8; N]` · `bool`
 
-## Benchmark Results (v0.2.0)
+## Benchmark Results (v0.3.0)
 
-### Fair Comparison: PulseMap vs `lru` crate (same category)
+### PulseMap vs `lru` crate (same category — bounded cache)
 
 | Benchmark (100K ops) | PulseMap | `lru` crate | Result |
 |---------------------|:-------:|:-----------:|:------:|
-| **INSERT** | **36 ms** | 79 ms | ✅ **2.2x faster** |
-| **MIXED (insert+lookup)** | **63 ms** | 88 ms | ✅ **1.4x faster** |
-| **EVICTION (50K)** | **4.6 ms** | 4.8 ms | ✅ **~same** |
-| LOOKUP | 34 ms | **15 ms** | lru faster (SIMD planned) |
+| **INSERT** | **15 ms** | 32 ms | ✅ **2.1x faster** |
+| **MIXED (insert+lookup)** | **32 ms** | 44 ms | ✅ **1.4x faster** |
+| **EVICTION (50K)** | **1.8 ms** | 3.2 ms | ✅ **1.8x faster** |
+| LOOKUP | 18 ms | **8.3 ms** | lru 2.2x faster |
 
 ### Reference: PulseMap vs std::HashMap (different category)
 
 | Benchmark (100K ops) | PulseMap | std::HashMap | Note |
 |---------------------|:-------:|:------------:|:----:|
-| INSERT | 36 ms | 7 ms | std has no eviction |
-| LOOKUP | 34 ms | 11 ms | std uses SIMD |
-| EVICTION | **4.6 ms** | impossible | ∞ |
+| INSERT | 15 ms | 3.6 ms | std has no eviction |
+| LOOKUP | 18 ms | 4.3 ms | std uses SIMD + native types |
+| EVICTION | **1.8 ms** | impossible | ∞ |
 
 > **Note:** std::HashMap and PulseMap solve different problems. HashMap stores everything forever.
 > PulseMap is a bounded cache. Compare with `lru`/`moka` for fair comparison.
@@ -130,13 +130,14 @@ pulse_map/
 ├── README.md
 ├── CHANGELOG.md
 ├── src/
-│   ├── lib.rs              # Public API (PulseMap, TypedPulseMap<K,V>, PulseKey/PulseValue)
-│   ├── raw.rs              # PulseMapRaw — raw byte engine
+│   ├── lib.rs              # Public API (PulseMap, TypedPulseMap<K,V>, Entry API)
+│   ├── raw.rs              # PulseMapRaw — raw byte engine (power-of-2 + prefetch)
 │   ├── iter.rs             # RawIter + TypedIter
 │   ├── traits.rs           # Debug, Display, Extend, From<HashMap>
+│   ├── simd.rs             # SIMD H2 matching (--features simd, x86_64)
 │   └── core/               # Core engine (64-byte internals)
 │       ├── mod.rs           # Module re-exports
-│       ├── meta.rs          # MetaWord (64-bit packed metadata)
+│       ├── meta.rs          # MetaWord (branchless match_mask + SIMD dispatch)
 │       ├── slot.rs          # Slot (14-byte inline/slab)
 │       ├── bucket.rs        # Bucket (64B cache-line aligned)
 │       ├── slab.rs          # SlabPool (arena allocator)
@@ -168,9 +169,28 @@ pulse_map/
 | `peek(&K) → Option<V>` | Lookup (no priority update) |
 | `contains_key(&K) → bool` | Existence check |
 | `remove(&K) → bool` | Typed removal |
+| `entry(K) → Entry` | Entry API (or_insert, and_modify) |
 | `iter() → TypedIter<K,V>` | Iterate all pairs |
 | `extend(IntoIterator)` | Bulk insert |
 | `From<HashMap<K,V>>` | Convert from std::HashMap |
+
+## Feature Flags
+
+| Feature | Default | Description |
+|---------|:-------:|-------------|
+| `std` | ✅ | Enables `From<HashMap>`, standard library |
+| `simd` | ❌ | SSE2 SIMD H2 matching (x86_64 only) |
+
+```toml
+# Default (std)
+pulse_map = "0.3"
+
+# With SIMD
+pulse_map = { version = "0.3", features = ["simd"] }
+
+# no_std
+pulse_map = { version = "0.3", default-features = false }
+```
 
 ### Design Notes
 
