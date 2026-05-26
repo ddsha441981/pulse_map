@@ -30,6 +30,7 @@
 mod core;
 mod raw;
 mod iter;
+mod traits;
 
 // ── Re-exports ──
 pub use crate::core::meta::MetaWord;
@@ -306,44 +307,6 @@ impl<K: PulseKey, V: PulseValue> TypedPulseMap<K, V> {
     pub fn eviction_count(&self) -> usize { self.raw.eviction_count() }
 }
 
-// ── Debug trait ──
-
-impl<K: PulseKey + std::fmt::Debug, V: PulseValue + std::fmt::Debug> std::fmt::Debug for TypedPulseMap<K, V> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("TypedPulseMap")
-            .field("len", &self.len())
-            .field("capacity", &self.capacity())
-            .field("load_factor", &format!("{:.1}%", self.load_factor() * 100.0))
-            .field("evictions", &self.eviction_count())
-            .finish()
-    }
-}
-
-// ── Display trait ──
-
-impl<K: PulseKey, V: PulseValue> std::fmt::Display for TypedPulseMap<K, V> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "PulseMap({}/{} entries, {:.1}% load, {} evictions)",
-            self.len(),
-            self.capacity(),
-            self.load_factor() * 100.0,
-            self.eviction_count()
-        )
-    }
-}
-
-// ── Extend trait ──
-
-impl<K: PulseKey, V: PulseValue> Extend<(K, V)> for TypedPulseMap<K, V> {
-    fn extend<I: IntoIterator<Item = (K, V)>>(&mut self, iter: I) {
-        for (k, v) in iter {
-            self.insert(k, v);
-        }
-    }
-}
-
 // ═══════════════════════════════════════════════════════════════
 // Tests
 // ═══════════════════════════════════════════════════════════════
@@ -521,5 +484,20 @@ mod tests {
         map.insert(3, 30);
         let collected: Vec<(u32, u32)> = map.iter().collect();
         assert_eq!(collected.len(), 3);
+    }
+
+    #[test]
+    fn test_typed_from_hashmap() {
+        use std::collections::HashMap;
+        let mut std_map = HashMap::new();
+        std_map.insert(1u32, 100u32);
+        std_map.insert(2, 200);
+        std_map.insert(3, 300);
+
+        let pulse: TypedPulseMap<u32, u32> = TypedPulseMap::from(std_map);
+        assert_eq!(pulse.len(), 3);
+        assert_eq!(pulse.get(&1), Some(100));
+        assert_eq!(pulse.get(&2), Some(200));
+        assert_eq!(pulse.get(&3), Some(300));
     }
 }

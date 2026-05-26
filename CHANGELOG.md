@@ -62,7 +62,7 @@ The foundation of PulseMap: a 64-byte cache-line hash table with built-in evicti
 
 ---
 
-## [v0.2.0] — 2026-05-29
+## [v0.2.0] — 2026-05-22
 
 ### 🚀 Generic Types + Iterator + Traits
 
@@ -93,14 +93,27 @@ Layered architecture: `core/` → `raw.rs` → `lib.rs`. Users get typed API, po
 - `Debug` — shows len, capacity, load%, evictions
 - `Display` — human-readable `PulseMap(n/cap entries, x% load, y evictions)`
 - `Extend<(K, V)>` — bulk insertion from any iterator
+- `From<HashMap<K, V>>` — convert std::HashMap to TypedPulseMap (auto-calculates bucket count)
 
 **Zero-Alloc Serialization**
 - `PulseKey`/`PulseValue` traits now use associated type `Bytes`
 - Numeric types (`u32`, `u64`, etc.) return `[u8; N]` on stack — **zero heap allocation**
 - `String`/`Vec<u8>` still use `Vec<u8>` (unavoidable)
 
+### Design Decision: `Index<&K>` NOT Implemented
+
+`map[&key]` syntax requires returning `&V` (a reference to the value). PulseMap stores values
+as raw bytes and deserializes them on read — it returns `V` (an owned copy), not `&V`.
+
+Implementing `Index` would require either:
+1. Panicking (unsafe, bad UX) — rejected
+2. Caching deserialized values (extra memory, defeats purpose) — rejected
+3. Leaking memory (unsafe) — rejected
+
+**Use `map.get(&key)` instead.** Returns `Option<V>`.
+
 **Testing**
-- 28 tests passing (24 unit + 4 doc tests)
+- 29 tests passing (25 unit + 4 doc tests)
 
 ### Benchmarks (v0.2.0) — Fair Comparison
 
@@ -131,7 +144,6 @@ Layered architecture: `core/` → `raw.rs` → `lib.rs`. Users get typed API, po
 - [ ] Power-of-2 bucket count (bitwise modulo)
 - [ ] Prefetch hints
 - [ ] `Entry` API
-- [ ] `From<HashMap>` conversion
 - [ ] `#![no_std]` support
 
 ---
