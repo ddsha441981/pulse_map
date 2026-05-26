@@ -1,0 +1,67 @@
+//! Trait implementations for TypedPulseMap.
+//!
+//! - `Debug` — struct info (len, capacity, load%, evictions)
+//! - `Display` — human-readable summary
+//! - `Extend<(K, V)>` — bulk insertion from iterators
+//! - `From<HashMap<K, V>>` — convert std::HashMap to TypedPulseMap
+
+use crate::{PulseKey, PulseValue, TypedPulseMap};
+
+// ── Debug trait ──
+
+impl<K: PulseKey + std::fmt::Debug, V: PulseValue + std::fmt::Debug> std::fmt::Debug for TypedPulseMap<K, V> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TypedPulseMap")
+            .field("len", &self.len())
+            .field("capacity", &self.capacity())
+            .field("load_factor", &format!("{:.1}%", self.load_factor() * 100.0))
+            .field("evictions", &self.eviction_count())
+            .finish()
+    }
+}
+
+// ── Display trait ──
+
+impl<K: PulseKey, V: PulseValue> std::fmt::Display for TypedPulseMap<K, V> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "PulseMap({}/{} entries, {:.1}% load, {} evictions)",
+            self.len(),
+            self.capacity(),
+            self.load_factor() * 100.0,
+            self.eviction_count()
+        )
+    }
+}
+
+// ── Extend trait ──
+
+impl<K: PulseKey, V: PulseValue> Extend<(K, V)> for TypedPulseMap<K, V> {
+    fn extend<I: IntoIterator<Item = (K, V)>>(&mut self, iter: I) {
+        for (k, v) in iter {
+            self.insert(k, v);
+        }
+    }
+}
+
+// ── From<HashMap> trait ──
+
+impl<K: PulseKey + std::hash::Hash + Eq, V: PulseValue> From<std::collections::HashMap<K, V>> for TypedPulseMap<K, V> {
+    /// Convert a std::HashMap into a TypedPulseMap.
+    ///
+    /// The number of buckets is auto-calculated for ~65% load factor.
+    fn from(map: std::collections::HashMap<K, V>) -> Self {
+        // Target ~65% load factor: buckets = entries / (4 slots * 0.65)
+        let num_buckets = (map.len() / 3).max(16);
+        let mut pulse = TypedPulseMap::new(num_buckets);
+        for (k, v) in map {
+            pulse.insert(k, v);
+        }
+        pulse
+    }
+}
+
+// Note: Index<&K> trait is intentionally NOT implemented.
+// PulseMap stores bytes, not typed values. `get()` returns `Option<V>` (deserialized copy),
+// but Index requires `&V` (a reference). Use `.get()` instead of `map[&key]`.

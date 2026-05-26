@@ -7,46 +7,94 @@
 
 > Every bucket fits in exactly **one 64-byte CPU cache line** with embedded LFU+LRU eviction metadata. Eviction decisions cost **zero additional cache misses**.
 
+## What Is PulseMap?
+
+PulseMap is a **hash table with built-in eviction** — not a HashMap replacement.
+
+Use **HashMap** when you need to store all data forever.
+Use **PulseMap** when you need a **fixed-memory cache** that automatically evicts cold entries.
+
+```
+HashMap       = Store everything, memory grows unbounded
+PulseMap      = Store hot data only, memory stays fixed, cold data evicted
+```
+
 ## Why PulseMap?
 
-| Problem | Existing Solutions | PulseMap |
-|---------|-------------------|----------|
-| Hash table + cache = 2 data structures | HashMap + LRU list (extra pointer chasing) | **Single structure, built-in eviction** |
-| Eviction requires extra memory fetches | W-TinyLFU needs 5-7 cache line touches | **Zero extra fetches** |
-| Unbounded memory growth | HashMap grows forever, must resize | **Fixed memory budget** |
-| Metadata in separate cache line | Swiss Table: control bytes ≠ slot array | **Metadata + slots in same 64B** |
+| Problem | `HashMap + LRU list` | PulseMap |
+|---------|---------------------|----------|
+| Two data structures to manage | HashMap + linked list | **Single structure** |
+| Eviction = extra cache misses | 2-3 pointer chases per eviction | **Zero extra fetches** |
+| Memory overhead | Pointers for LRU list (~48B/entry) | **Packed in 14B/entry** |
+| Cache-friendliness | Random pointer chasing | **64-byte aligned, 1 fetch** |
 
 ## Quick Start
+
+### Raw API (`&[u8]` keys — power users)
 
 ```rust
 use pulse_map::PulseMap;
 
 let mut map = PulseMap::new(1024); // 1024 buckets × 4 slots = 4096 capacity
-
 map.insert(b"hello", b"world");
 assert_eq!(map.get(b"hello"), Some(&b"world"[..]));
-
 map.remove(b"hello");
 assert_eq!(map.get(b"hello"), None);
 ```
 
-## Benchmark Results (v0.1.0)
+### Typed API (generic keys — recommended)
 
-**PulseMap vs std::HashMap** (which uses Swiss Table/hashbrown internally)
+```rust
+use pulse_map::TypedPulseMap;
 
-| Benchmark (100K ops) | PulseMap | std::HashMap | Speedup |
-|---------------------|:-------:|:------------:|:-------:|
-| **INSERT** | **22.7 ms** | 78.0 ms | **3.4x faster** |
-| **LOOKUP** | 23.4 ms | 17.1 ms | std 1.4x faster |
-| **MIXED (insert+lookup)** | **37.3 ms** | 91.8 ms | **2.5x faster** |
-| **EVICTION (50K→1K)** | **2.5 ms** | impossible | ∞ |
+let mut map = TypedPulseMap::<u32, u64>::new(256);
+map.insert(42, 100);
+assert_eq!(map.get(&42), Some(100));
 
-### `perf stat` (Zig prototype, same algorithm)
+// Iterate
+for (key, value) in map.iter() {
+    println!("{}: {}", key, value);
+}
 
-| Counter | PulseMap | Swiss Table | Reduction |
-|---------|:-------:|:-----------:|:---------:|
-| cache-misses | **1.8M** | 3.5M | **47% fewer** |
-| IPC | **1.03** | 0.65 | **58% better** |
+// Bulk insert
+map.extend(vec![(1, 10), (2, 20), (3, 30)]);
+
+// From std::HashMap
+use std::collections::HashMap;
+let std_map: HashMap<u32, u32> = HashMap::from([(1, 10), (2, 20)]);
+let pulse = TypedPulseMap::from(std_map);
+
+// Stats
+println!("{}", map); // PulseMap(4/1024 entries, 0.4% load, 0 evictions)
+```
+
+### Supported Types
+
+Built-in `PulseKey`/`PulseValue` implementations (zero-alloc for numerics):
+
+`u8` · `u16` · `u32` · `u64` · `i32` · `i64` · `String` · `Vec<u8>` · `[u8; N]` · `bool`
+
+## Benchmark Results (v0.2.0)
+
+### Fair Comparison: PulseMap vs `lru` crate (same category)
+
+| Benchmark (100K ops) | PulseMap | `lru` crate | Result |
+|---------------------|:-------:|:-----------:|:------:|
+| **INSERT** | **36 ms** | 79 ms | ✅ **2.2x faster** |
+| **MIXED (insert+lookup)** | **63 ms** | 88 ms | ✅ **1.4x faster** |
+| **EVICTION (50K)** | **4.6 ms** | 4.8 ms | ✅ **~same** |
+| LOOKUP | 34 ms | **15 ms** | lru faster (SIMD planned) |
+
+### Reference: PulseMap vs std::HashMap (different category)
+
+| Benchmark (100K ops) | PulseMap | std::HashMap | Note |
+|---------------------|:-------:|:------------:|:----:|
+| INSERT | 36 ms | 7 ms | std has no eviction |
+| LOOKUP | 34 ms | 11 ms | std uses SIMD |
+| EVICTION | **4.6 ms** | impossible | ∞ |
+
+> **Note:** std::HashMap and PulseMap solve different problems. HashMap stores everything forever.
+> PulseMap is a bounded cache. Compare with `lru`/`moka` for fair comparison.
 
 ## Architecture
 
@@ -66,6 +114,14 @@ assert_eq!(map.get(b"hello"), None);
 └──────────────────────────────────────────────────────────────────┘
 ```
 
+### Layered Design
+
+```
+Layer 3: lib.rs          → User API (TypedPulseMap<K,V>, PulseMap alias)
+Layer 2: raw.rs          → Hash table logic (insert/get/remove/evict)
+Layer 1: core/           → Building blocks (MetaWord, Slot, Bucket, hash)
+```
+
 ## Project Structure
 
 ```
@@ -74,8 +130,11 @@ pulse_map/
 ├── README.md
 ├── CHANGELOG.md
 ├── src/
-│   ├── lib.rs              # Public API (PulseMap struct)
-│   └── core/               # Core engine
+│   ├── lib.rs              # Public API (PulseMap, TypedPulseMap<K,V>, PulseKey/PulseValue)
+│   ├── raw.rs              # PulseMapRaw — raw byte engine
+│   ├── iter.rs             # RawIter + TypedIter
+│   ├── traits.rs           # Debug, Display, Extend, From<HashMap>
+│   └── core/               # Core engine (64-byte internals)
 │       ├── mod.rs           # Module re-exports
 │       ├── meta.rs          # MetaWord (64-bit packed metadata)
 │       ├── slot.rs          # Slot (14-byte inline/slab)
@@ -83,31 +142,49 @@ pulse_map/
 │       ├── slab.rs          # SlabPool (arena allocator)
 │       └── hash.rs          # wyhash → H1/H2/ext_fp
 └── benches/
-    └── benchmark.rs         # Criterion benchmarks
+    └── benchmark.rs         # Criterion benchmarks (vs lru + std)
 ```
 
-## API
+## API Reference
 
-| Method | Signature | Description |
-|--------|-----------|-------------|
-| `new` | `PulseMap::new(num_buckets: usize)` | Create with fixed capacity |
-| `insert` | `&mut self, key: &[u8], value: &[u8]` | Insert or update (evicts on full) |
-| `get` | `&self, key: &[u8] → Option<&[u8]>` | Lookup (updates priority) |
-| `peek` | `&self, key: &[u8] → Option<&[u8]>` | Lookup (no priority update) |
-| `remove` | `&mut self, key: &[u8] → bool` | Delete a key |
-| `len` | `&self → usize` | Entry count |
-| `capacity` | `&self → usize` | Total slots |
-| `load_factor` | `&self → f64` | Current load |
-| `eviction_count` | `&self → usize` | Total evictions |
+### PulseMap (raw `&[u8]` API)
+
+| Method | Description |
+|--------|-------------|
+| `PulseMap::new(num_buckets)` | Create with fixed capacity |
+| `insert(&mut self, &[u8], &[u8])` | Insert or update (evicts on full) |
+| `get(&self, &[u8]) → Option<&[u8]>` | Lookup (updates priority) |
+| `peek(&self, &[u8]) → Option<&[u8]>` | Lookup (no priority update) |
+| `remove(&mut self, &[u8]) → bool` | Delete a key |
+| `len()`, `capacity()`, `load_factor()` | Stats |
+
+### TypedPulseMap<K, V> (generic API)
+
+| Method | Description |
+|--------|-------------|
+| `TypedPulseMap::<K,V>::new(n)` | Create typed map |
+| `insert(K, V)` | Typed insert |
+| `get(&K) → Option<V>` | Typed lookup |
+| `peek(&K) → Option<V>` | Lookup (no priority update) |
+| `contains_key(&K) → bool` | Existence check |
+| `remove(&K) → bool` | Typed removal |
+| `iter() → TypedIter<K,V>` | Iterate all pairs |
+| `extend(IntoIterator)` | Bulk insert |
+| `From<HashMap<K,V>>` | Convert from std::HashMap |
+
+### Design Notes
+
+- **`map[&key]` (Index trait) is intentionally NOT supported.** PulseMap stores bytes and deserializes on read — it returns `V` (owned copy), not `&V` (reference). Use `.get(&key)` instead.
 
 ## Use Cases
 
-- **L4 / Software-defined CPU cache tiers**
-- **Network routers/switches** — per-packet latency critical
-- **Database buffer pools** — bounded cache with constant eviction
-- **Embedded systems** — no dynamic allocation, deterministic latency
-- **CDN edge caches** — hot content stays, cold evicted
-- **Game engines** — asset caching with fixed VRAM budget
+- **DNS cache** — bounded, hot domains stay
+- **API rate limiter** — per-IP counters with auto-cleanup
+- **Database query cache** — fixed memory, LRU+LFU eviction
+- **CDN edge cache** — hot content stays, cold evicted
+- **Network routers** — per-packet, latency-critical lookup
+- **Embedded systems** — deterministic memory, no heap growth
+- **Game engines** — asset cache with fixed VRAM budget
 
 ## Author
 
@@ -127,14 +204,11 @@ pulse_map/
 
 ---
 
----
 ## License
 
 Licensed under either of:
 
-- **Apache License, Version 2.0** ? [LICENSE-APACHE](LICENSE-APACHE) or <http://www.apache.org/licenses/LICENSE-2.0>
-- **MIT License** ? [LICENSE-MIT](LICENSE-MIT) or <http://opensource.org/licenses/MIT>
+- **Apache License, Version 2.0** — [LICENSE-APACHE](LICENSE-APACHE) or <http://www.apache.org/licenses/LICENSE-2.0>
+- **MIT License** — [LICENSE-MIT](LICENSE-MIT) or <http://opensource.org/licenses/MIT>
 
 at your option.
-
-
