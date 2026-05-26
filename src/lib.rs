@@ -27,10 +27,17 @@
 //! assert_eq!(map.get(&42), Some(100));
 //! ```
 
+#![cfg_attr(not(feature = "std"), no_std)]
+
+#[cfg(not(feature = "std"))]
+extern crate alloc;
+
 mod core;
 mod raw;
 mod iter;
 mod traits;
+#[cfg(all(target_arch = "x86_64", feature = "simd"))]
+mod simd;
 
 // ── Re-exports ──
 pub use crate::core::meta::MetaWord;
@@ -305,6 +312,116 @@ impl<K: PulseKey, V: PulseValue> TypedPulseMap<K, V> {
 
     #[inline]
     pub fn eviction_count(&self) -> usize { self.raw.eviction_count() }
+
+    /// Gets the given key's entry in the map for in-place manipulation.
+    ///
+    /// # Example
+    /// ```
+    /// use pulse_map::TypedPulseMap;
+    /// let mut map = TypedPulseMap::<u32, u32>::new(64);
+    /// map.entry(42).or_insert(100);
+    /// assert_eq!(map.get(&42), Some(100));
+    /// ```
+    pub fn entry(&mut self, key: K) -> Entry<'_, K, V> {
+        let kb = key.to_bytes();
+        let existing = self.raw.peek(kb.as_ref()).and_then(|vb| V::from_bytes(vb));
+        match existing {
+            Some(val) => Entry::Occupied(OccupiedEntry { map: self, key, value: val }),
+            None => Entry::Vacant(VacantEntry { map: self, key }),
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Entry API
+// ═══════════════════════════════════════════════════════════════
+
+/// A view into a single entry in a TypedPulseMap.
+pub enum Entry<'a, K: PulseKey, V: PulseValue> {
+    /// Key exists in the map.
+    Occupied(OccupiedEntry<'a, K, V>),
+    /// Key does not exist in the map.
+    Vacant(VacantEntry<'a, K, V>),
+}
+
+/// A view into an occupied entry in a TypedPulseMap.
+pub struct OccupiedEntry<'a, K: PulseKey, V: PulseValue> {
+    map: &'a mut TypedPulseMap<K, V>,
+    key: K,
+    value: V,
+}
+
+/// A view into a vacant entry in a TypedPulseMap.
+pub struct VacantEntry<'a, K: PulseKey, V: PulseValue> {
+    map: &'a mut TypedPulseMap<K, V>,
+    key: K,
+}
+
+impl<'a, K: PulseKey, V: PulseValue> Entry<'a, K, V> {
+    /// Insert default value if vacant.
+    pub fn or_insert(self, default: V) {
+        if let Entry::Vacant(e) = self {
+            e.map.insert(e.key, default);
+        }
+    }
+
+    /// Insert computed value if vacant.
+    pub fn or_insert_with<F: FnOnce() -> V>(self, f: F) {
+        if let Entry::Vacant(e) = self {
+            e.map.insert(e.key, f());
+        }
+    }
+
+    /// Modify the value if occupied, then return self for chaining.
+    pub fn and_modify<F: FnOnce(&mut V)>(self, f: F) -> Self {
+        match self {
+            Entry::Occupied(mut e) => {
+                f(&mut e.value);
+                // Write modified value back
+                let kb = e.key.to_bytes();
+                let vb = e.value.to_bytes();
+                e.map.raw.insert(kb.as_ref(), vb.as_ref());
+                Entry::Occupied(e)
+            }
+            Entry::Vacant(e) => Entry::Vacant(e),
+        }
+    }
+}
+
+impl<'a, K: PulseKey, V: PulseValue> OccupiedEntry<'a, K, V> {
+    /// Get the current value.
+    pub fn get(&self) -> &V {
+        &self.value
+    }
+
+    /// Get the key.
+    pub fn key(&self) -> &K {
+        &self.key
+    }
+
+    /// Replace the value and return the old one.
+    pub fn insert(self, value: V) -> V {
+        self.map.insert(self.key, value);
+        self.value
+    }
+
+    /// Remove the entry and return the value.
+    pub fn remove(self) -> V {
+        self.map.remove(&self.key);
+        self.value
+    }
+}
+
+impl<'a, K: PulseKey, V: PulseValue> VacantEntry<'a, K, V> {
+    /// Get the key.
+    pub fn key(&self) -> &K {
+        &self.key
+    }
+
+    /// Insert a value into the vacant entry.
+    pub fn insert(self, value: V) {
+        self.map.insert(self.key, value);
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -390,7 +507,8 @@ mod tests {
     #[test]
     fn test_raw_load_factor() {
         let mut map = PulseMap::new(100);
-        assert_eq!(map.capacity(), 400);
+        // 100 rounds up to 128 (next power of 2), 128 * 4 = 512
+        assert_eq!(map.capacity(), 512);
         for i in 0u32..200 {
             map.insert(&i.to_le_bytes(), b"v");
         }
@@ -499,5 +617,44 @@ mod tests {
         assert_eq!(pulse.get(&1), Some(100));
         assert_eq!(pulse.get(&2), Some(200));
         assert_eq!(pulse.get(&3), Some(300));
+    }
+
+    // ── Entry API tests ──
+
+    #[test]
+    fn test_entry_or_insert_vacant() {
+        let mut map = TypedPulseMap::<u32, u32>::new(16);
+        map.entry(42).or_insert(100);
+        assert_eq!(map.get(&42), Some(100));
+    }
+
+    #[test]
+    fn test_entry_or_insert_occupied() {
+        let mut map = TypedPulseMap::<u32, u32>::new(16);
+        map.insert(42, 100);
+        map.entry(42).or_insert(999); // should NOT overwrite
+        assert_eq!(map.get(&42), Some(100));
+    }
+
+    #[test]
+    fn test_entry_or_insert_with() {
+        let mut map = TypedPulseMap::<u32, u32>::new(16);
+        map.entry(10).or_insert_with(|| 42 * 2);
+        assert_eq!(map.get(&10), Some(84));
+    }
+
+    #[test]
+    fn test_entry_and_modify() {
+        let mut map = TypedPulseMap::<u32, u32>::new(16);
+        map.insert(1, 10);
+        map.entry(1).and_modify(|v| *v += 5).or_insert(0);
+        assert_eq!(map.get(&1), Some(15));
+    }
+
+    #[test]
+    fn test_entry_and_modify_vacant() {
+        let mut map = TypedPulseMap::<u32, u32>::new(16);
+        map.entry(99).and_modify(|v| *v += 5).or_insert(42);
+        assert_eq!(map.get(&99), Some(42));
     }
 }

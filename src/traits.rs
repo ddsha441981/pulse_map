@@ -45,8 +45,9 @@ impl<K: PulseKey, V: PulseValue> Extend<(K, V)> for TypedPulseMap<K, V> {
     }
 }
 
-// ── From<HashMap> trait ──
+// ── From<HashMap> trait (requires std) ──
 
+#[cfg(feature = "std")]
 impl<K: PulseKey + std::hash::Hash + Eq, V: PulseValue> From<std::collections::HashMap<K, V>> for TypedPulseMap<K, V> {
     /// Convert a std::HashMap into a TypedPulseMap.
     ///

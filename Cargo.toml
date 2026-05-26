@@ -1,6 +1,6 @@
 [package]
 name = "pulse_map"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 authors = ["Deendayal Kumawat <deendayal_kumawat@outlook.com>"]
 description = "A CPU cache-line hash table with zero-cost eviction. Every bucket fits in exactly one 64-byte cache line with embedded LFU+LRU eviction metadata."
@@ -14,6 +14,11 @@ readme = "README.md"
 
 [dependencies]
 wyhash = "0.5"
+
+[features]
+default = ["std"]
+std = []
+simd = []
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
