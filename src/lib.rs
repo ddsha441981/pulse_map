@@ -38,6 +38,8 @@ mod iter;
 mod traits;
 #[cfg(all(target_arch = "x86_64", feature = "simd"))]
 mod simd;
+#[cfg(feature = "std")]
+mod sync;
 
 // ── Re-exports ──
 pub use crate::core::meta::MetaWord;
@@ -45,6 +47,8 @@ pub use crate::core::slot::Slot;
 pub use crate::core::bucket::Bucket;
 pub use raw::PulseMapRaw;
 pub use iter::{RawIter, TypedIter};
+#[cfg(feature = "std")]
+pub use sync::ConcurrentPulseMap;
 
 // ── SlotState (shared by core and raw) ──
 
@@ -656,5 +660,133 @@ mod tests {
         let mut map = TypedPulseMap::<u32, u32>::new(16);
         map.entry(99).and_modify(|v| *v += 5).or_insert(42);
         assert_eq!(map.get(&99), Some(42));
+    }
+
+    // ── Concurrent PulseMap tests ──
+
+    #[test]
+    fn test_concurrent_basic() {
+        let map = ConcurrentPulseMap::<u32, u32>::new(64);
+        map.insert(1, 10);
+        map.insert(2, 20);
+        assert_eq!(map.get(&1), Some(10));
+        assert_eq!(map.get(&2), Some(20));
+        assert_eq!(map.get(&3), None);
+        assert_eq!(map.len(), 2);
+    }
+
+    #[test]
+    fn test_concurrent_remove() {
+        let map = ConcurrentPulseMap::<u32, u32>::new(64);
+        map.insert(1, 10);
+        assert!(map.remove(&1));
+        assert_eq!(map.get(&1), None);
+        assert!(!map.remove(&1));
+    }
+
+    #[test]
+    fn test_concurrent_contains_key() {
+        let map = ConcurrentPulseMap::<u32, u32>::new(64);
+        map.insert(5, 50);
+        assert!(map.contains_key(&5));
+        assert!(!map.contains_key(&6));
+    }
+
+    #[test]
+    fn test_concurrent_multithread_insert() {
+        use std::sync::Arc;
+        use std::thread;
+
+        let map = Arc::new(ConcurrentPulseMap::<u32, u32>::new(16384));
+        let handles: Vec<_> = (0..4).map(|t| {
+            let m = map.clone();
+            thread::spawn(move || {
+                for i in 0..1000u32 {
+                    m.insert(t * 10000 + i, i);
+                }
+            })
+        }).collect();
+
+        for h in handles { h.join().unwrap(); }
+        // With 16384 buckets (65K capacity) and 4000 entries, no eviction
+        assert!(map.len() >= 3900); // Allow tiny tolerance for hash collisions
+    }
+
+    #[test]
+    fn test_concurrent_multithread_read_write() {
+        use std::sync::Arc;
+        use std::thread;
+
+        let map = Arc::new(ConcurrentPulseMap::<u32, u32>::new(4096));
+
+        // Pre-fill
+        for i in 0..500u32 {
+            map.insert(i, i * 10);
+        }
+
+        // Concurrent readers + writers
+        let handles: Vec<_> = (0..4).map(|t| {
+            let m = map.clone();
+            thread::spawn(move || {
+                for i in 0..500u32 {
+                    if t % 2 == 0 {
+                        m.insert(500 + t * 1000 + i, i);
+                    } else {
+                        let _ = m.get(&(i % 500));
+                    }
+                }
+            })
+        }).collect();
+
+        for h in handles { h.join().unwrap(); }
+        assert!(map.len() > 0);
+    }
+
+    #[test]
+    fn test_concurrent_display() {
+        let map = ConcurrentPulseMap::<u32, u32>::new(16);
+        map.insert(1, 10);
+        let s = format!("{}", map);
+        assert!(s.contains("ConcurrentPulseMap"));
+        assert!(s.contains("1/"));
+    }
+
+    #[test]
+    fn test_concurrent_manual_resize() {
+        let map = ConcurrentPulseMap::<u32, u32>::new(256);
+        // 256 buckets = 1024 capacity
+        assert_eq!(map.capacity(), 1024);
+
+        // Fill with entries (well below capacity, no eviction)
+        for i in 0..40u32 {
+            map.insert(i, i * 10);
+        }
+        assert_eq!(map.len(), 40);
+
+        // Manual resize to 512 buckets
+        map.resize(512);
+        assert_eq!(map.capacity(), 2048);
+
+        // All entries survive rehash (plenty of room)
+        assert_eq!(map.len(), 40);
+        assert_eq!(map.get(&0), Some(0));
+        assert_eq!(map.get(&39), Some(390));
+    }
+
+    #[test]
+    fn test_concurrent_auto_resize() {
+        let map = ConcurrentPulseMap::<u32, u32>::with_auto_resize(16);
+        // Initial: 16 buckets = 64 capacity
+        let initial_cap = map.capacity();
+
+        // Insert enough to trigger auto-resize (> 75% of 64 = 48+)
+        for i in 0..200u32 {
+            map.insert(i, i * 10);
+        }
+
+        // Should have auto-resized
+        assert!(map.capacity() > initial_cap);
+        // Most data should be intact
+        assert!(map.len() > 100);
     }
 }

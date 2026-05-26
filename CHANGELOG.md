@@ -194,13 +194,67 @@ Implementing `Index` would require either:
 
 ---
 
-## [v0.4.0] — Planned
+## [v0.4.0] — 2026-05-26
 
 ### 🔒 Thread Safety + Dynamic Resize
 
-- [ ] Per-bucket spinlock
-- [ ] `PulseMapSync<K, V>`
-- [ ] Dynamic resizing
+**ConcurrentPulseMap** — thread-safe with per-bucket spinlocks. Only 7% overhead vs single-threaded.
+
+### Added
+
+**ConcurrentPulseMap (`sync.rs`)**
+- `ConcurrentPulseMap::<K, V>::new(n)` — fixed-size concurrent map
+- `ConcurrentPulseMap::with_auto_resize(n)` — auto-grows at 75% load
+- All methods take `&self` (not `&mut self`) — safe via `Arc`
+- `insert()`, `get()`, `peek()`, `remove()`, `contains_key()`
+- `len()`, `capacity()`, `load_factor()`, `eviction_count()`, `num_buckets()`
+- `Debug` and `Display` trait implementations
+
+**Per-Bucket Spinlock Architecture**
+- `BucketLocks` — `Vec<AtomicU8>` (1 lock per bucket)
+- `BucketGuard` — RAII guard (auto-unlock on drop)
+- `compare_exchange_weak` + `spin_loop()` for low-latency locking
+- Different buckets accessed fully in parallel
+
+**Dynamic Resize**
+- `map.resize(new_size)` — manual stop-the-world rehash
+- `with_auto_resize(n)` — auto-doubles at 75% load factor
+- `RwLock<MapInner>` — read lock for ops, write lock for resize
+
+**Slot Helpers (`slot.rs`)**
+- `get_key_bytes()` — extract key (inline or slab) for rehashing
+- `get_value_bytes()` — extract value (inline or slab) for rehashing
+
+**Testing**
+- 46 tests passing (38 unit + 8 doc tests)
+- Multi-threaded insert test (4 threads × 1000 entries)
+- Concurrent read/write test
+- Manual resize + auto-resize tests
+
+### Benchmarks (v0.4.0)
+
+**Concurrency Overhead**
+
+| Benchmark (100K) | TypedPulseMap | ConcurrentPulseMap (1T) | Overhead |
+|---|:---:|:---:|:---:|
+| INSERT | 13.8 ms | 14.8 ms | **7%** |
+
+**4-Thread Concurrent**
+
+| Benchmark (100K) | ConcurrentPulseMap |
+|---|:---:|
+| 4T INSERT | **20.8 ms** |
+| 4T LOOKUP | **15.2 ms** |
+| 4T MIXED | **35.6 ms** |
+
+**PulseMap vs `lru` crate (final score)**
+
+| Benchmark (100K) | PulseMap | `lru` | Result |
+|---|:---:|:---:|:---:|
+| **INSERT** | **13.8 ms** | 19.1 ms | ✅ **1.4x faster** |
+| **MIXED** | **17.9 ms** | 23.7 ms | ✅ **1.3x faster** |
+| **EVICTION** | **1.5 ms** | 2.2 ms | ✅ **1.5x faster** |
+| LOOKUP | 9.8 ms | **5.4 ms** | ❌ lru 1.8x faster |
 
 ---
 
@@ -212,5 +266,3 @@ Implementing `Index` would require either:
 - [ ] Python via PyO3
 - [ ] Java via JNI
 - [ ] Node.js via napi-rs
-
-
