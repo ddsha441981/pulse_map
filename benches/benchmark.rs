@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Deendayal Kumawat. All rights reserved.
+// Licensed under the MIT OR Apache-2.0 license.
+
 use criterion::{criterion_group, criterion_main, Criterion, black_box};
 use pulse_map::{PulseMap, TypedPulseMap};
 use std::collections::HashMap;

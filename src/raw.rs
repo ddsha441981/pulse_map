@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Deendayal Kumawat. All rights reserved.
+// Licensed under the MIT OR Apache-2.0 license.
+
 //! Raw byte-level PulseMap — the foundation that generic PulseMap<K,V> wraps.
 //!
 //! Use `PulseMapRaw` directly when you want maximum control with `&[u8]` keys/values.
