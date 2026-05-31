@@ -124,3 +124,7 @@ jobs:
         run: cargo publish -p pulse_map
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+  # ═══════════════════════════════════════════════════════════
+  # other
+  # ═══════════════════════════════════════════════════════════
