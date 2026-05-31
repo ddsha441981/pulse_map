@@ -15,7 +15,7 @@ use alloc::format;
 // ── Debug trait ──
 
 impl<K: PulseKey + core::fmt::Debug, V: PulseValue + core::fmt::Debug> core::fmt::Debug
-for TypedPulseMap<K, V>
+    for TypedPulseMap<K, V>
 {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("TypedPulseMap")
@@ -59,7 +59,7 @@ impl<K: PulseKey, V: PulseValue> Extend<(K, V)> for TypedPulseMap<K, V> {
 
 #[cfg(feature = "std")]
 impl<K: PulseKey + std::hash::Hash + Eq, V: PulseValue> From<std::collections::HashMap<K, V>>
-for TypedPulseMap<K, V>
+    for TypedPulseMap<K, V>
 {
     /// Convert a std::HashMap into a TypedPulseMap.
     ///

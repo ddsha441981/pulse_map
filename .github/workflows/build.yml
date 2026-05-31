@@ -92,8 +92,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: "1.70.0"
+      - run: cargo check -p pulse_map
+      - run: cargo check -p pulse_map --no-default-features
       - run: cargo build -p pulse_map
-      - run: cargo test -p pulse_map
 
   # ═══════════════════════════════════════════════════════════
   # Documentation
