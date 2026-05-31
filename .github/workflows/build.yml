@@ -116,7 +116,7 @@ jobs:
     name: Publish to crates.io
     needs: [fmt, clippy, test, msrv, docs]
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: false # Disabled: startsWith(github.ref, 'refs/tags/v')
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
