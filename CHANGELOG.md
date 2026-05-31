@@ -255,14 +255,67 @@ Implementing `Index` would require either:
 | **MIXED** | **17.9 ms** | 23.7 ms | ✅ **1.3x faster** |
 | **EVICTION** | **1.5 ms** | 2.2 ms | ✅ **1.5x faster** |
 | LOOKUP | 9.8 ms | **5.4 ms** | ❌ lru 1.8x faster |
+---
+
+## [v0.5.0] — 2026-05-26
+
+### 🌐 FFI Bindings — Use PulseMap from Any Language
+
+**Workspace architecture** — all bindings live in separate crates under one workspace.
+
+### Added
+
+**Workspace (`Cargo.toml`)**
+- Rust workspace with 5 members: `pulse_map`, `pulse_map_ffi`, `pulse_map_py`, `pulse_map_java`, `pulse_map_node`
+
+**Phase 1: C FFI (`pulse_map_ffi/`)**
+- `libpulse_map_ffi.so` + `libpulse_map_ffi.a` (418K release)
+- `include/pulse_map.h` — clean C header with opaque `PulseMapHandle*`
+- 12 extern "C" functions: `new`, `new_auto_resize`, `free`, `insert`, `get`, `contains`, `remove`, `len`, `capacity`, `load_factor`, `eviction_count`, `resize`
+- NULL-safe, buffer overflow protection (`-2` return code)
+- 11 C tests passing
+
+**Phase 2: Python (`pulse_map_py/`)**
+- PyO3 bindings via `maturin`
+- Dict-like API: `cache["key"] = "value"`, `cache["key"]`, `del cache["key"]`, `"key" in cache`
+- Bytes API: `cache.insert(b"k", b"v")`, `cache.get(b"k")`
+- Properties: `len()`, `capacity`, `load_factor`, `eviction_count`
+- `repr()`: `PulseMap(len=1, capacity=256, load=0.4%)`
+- 11 Python tests passing
+
+**Phase 3: Java (`pulse_map_java/`)**
+- Java 22+ Panama FFM API (no JNI!)
+- Rust cdylib → `libpulse_map_java.so` → Java `Linker.downcallHandle()`
+- `PulseMap` class: `put()`, `get()`, `remove()`, `size()`, `capacity()`
+- `AutoCloseable` — `try (var cache = new PulseMap(1024)) { ... }`
+- Unicode support (UTF-8 round-trip)
+- 10 Java tests passing
+
+**Phase 4: Node.js (`pulse_map_node/`)**
+- napi-rs bindings → `pulse-map.node` (604K)
+- String API: `cache.set()`, `cache.get()`, `cache.delete()`, `cache.has()`
+- Bytes API: `cache.insertBytes()`, `cache.getBytes()`
+- Getters: `size`, `capacity`, `loadFactor`, `evictionCount`
+- 10 Node.js tests passing
+
+### Testing
+
+| Binding | Tests |
+|---------|:-----:|
+| C FFI | **11/11** |
+| Python | **11/11** |
+| Java | **10/10** |
+| Node.js | **10/10** |
+| **Total** | **42/42** |
 
 ---
 
-## [v0.5.0] — Planned
+## [v0.6.0] — Planned
 
-### 🌐 FFI Bindings
+### 🚀 Performance + Publishing
 
-- [ ] C FFI via `cbindgen`
-- [ ] Python via PyO3
-- [ ] Java via JNI
-- [ ] Node.js via napi-rs
+- [ ] Publish `pulse_map` to crates.io
+- [ ] Publish `pulse-map` to PyPI
+- [ ] Publish `pulse-map` to npm
+- [ ] TTL (time-to-live) expiration
+- [ ] Async support (tokio)

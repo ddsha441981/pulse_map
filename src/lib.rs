@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Deendayal Kumawat. All rights reserved.
+// Licensed under the MIT OR Apache-2.0 license.
+
 //! # PulseMap
 //!
 //! A CPU cache-line hash table with zero-cost eviction.

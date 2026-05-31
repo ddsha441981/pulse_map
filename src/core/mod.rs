@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Deendayal Kumawat. All rights reserved.
+// Licensed under the MIT OR Apache-2.0 license.
+
 //! Core engine — the 64-byte cache-line hash table internals.
 //!
 //! This module contains the fundamental building blocks:

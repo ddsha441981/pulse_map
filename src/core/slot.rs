@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Deendayal Kumawat. All rights reserved.
+// Licensed under the MIT OR Apache-2.0 license.
+
 //! Slot — 14-byte entry (inline key+value or slab pointer).
 //!
 //! Layout:

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Deendayal Kumawat. All rights reserved.
+// Licensed under the MIT OR Apache-2.0 license.
+
 //! SlabPool — Arena allocator for variable-length key+value entries.
 //!
 //! Used when keys > 6 bytes or values > 7 bytes (can't fit inline in a 14-byte slot).
@@ -32,6 +35,7 @@ impl SlabEntry {
 }
 
 /// Arena-based allocator for slab entries.
+#[allow(clippy::vec_box)] // Box needed: pointer stability for *const SlabEntry
 pub struct SlabPool {
     entries: Vec<Box<SlabEntry>>,
 }

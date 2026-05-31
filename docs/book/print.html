@@ -1,0 +1,1700 @@
+<!DOCTYPE HTML>
+<html lang="en" class="navy sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>PulseMap — The Complete Guide</title>
+        <meta name="robots" content="noindex">
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A CPU cache-line hash table with zero-cost eviction">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="favicon-8114d1fc.png">
+        <link rel="stylesheet" href="css/variables-8adf115d.css">
+        <link rel="stylesheet" href="css/general-2459343d.css">
+        <link rel="stylesheet" href="css/chrome-ae938929.css">
+        <link rel="stylesheet" href="css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "";
+            const default_light_theme = "navy";
+            const default_dark_theme = "rust";
+            window.path_to_searchindex_js = "searchindex-3071a43b.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="toc-d005dbd8.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('navy')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">PulseMap — The Complete Guide</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/ddsha441981/pulse_map" title="Git repository" aria-label="Git repository">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="pulsemap"><a class="header" href="#pulsemap">PulseMap</a></h1>
+<p><strong>A CPU cache-line hash table with zero-cost eviction.</strong></p>
+<blockquote>
+<p><strong>💡 Use PulseMap anywhere you’d use HashMap but can’t afford unbounded memory growth.</strong></p>
+</blockquote>
+<hr>
+<h2 id="what-is-pulsemap"><a class="header" href="#what-is-pulsemap">What is PulseMap?</a></h2>
+<p>PulseMap is a <strong>bounded, concurrent hash table</strong> where every bucket fits in exactly <strong>one 64-byte CPU cache line</strong>. Unlike <code>HashMap</code> which grows forever until you run out of memory, PulseMap has a fixed capacity and <strong>automatically evicts</strong> the least-useful entries when full.</p>
+<p><strong>Key insight:</strong> By packing metadata (state, H2 fingerprint, frequency counter, recency bits) into the same cache line as the data slots, eviction decisions cost <strong>zero additional cache misses</strong>.</p>
+<h2 id="why-pulsemap"><a class="header" href="#why-pulsemap">Why PulseMap?</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Problem</th><th>HashMap</th><th>Redis</th><th>PulseMap</th></tr>
+</thead>
+<tbody>
+<tr><td>Memory growth</td><td>❌ Unbounded → OOM</td><td>✅ Bounded</td><td>✅ Bounded</td></tr>
+<tr><td>Lookup latency</td><td>~10ns</td><td>~100μs (network)</td><td><strong>~5ns</strong></td></tr>
+<tr><td>Eviction</td><td>❌ None</td><td>✅ LRU</td><td>✅ LFU+LRU hybrid</td></tr>
+<tr><td>Thread safety</td><td>❌ <code>Mutex&lt;HashMap&gt;</code></td><td>✅ Single-threaded</td><td>✅ Per-bucket locks</td></tr>
+<tr><td>GC pauses</td><td>N/A</td><td>N/A</td><td><strong>Zero</strong></td></tr>
+<tr><td>Cache efficiency</td><td>❌ Random</td><td>N/A</td><td>✅ 1 cache line/bucket</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="quick-example"><a class="header" href="#quick-example">Quick Example</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use pulse_map::ConcurrentPulseMap;
+use std::sync::Arc;
+use std::thread;
+
+// Create a thread-safe map with auto-resize
+let map = Arc::new(ConcurrentPulseMap::&lt;String, u64&gt;::with_auto_resize(256));
+
+// Concurrent writes from 4 threads
+let handles: Vec&lt;_&gt; = (0..4).map(|t| {
+    let m = map.clone();
+    thread::spawn(move || {
+        for i in 0..1000 {
+            m.insert(format!("key_{}", t * 1000 + i), i as u64);
+        }
+    })
+}).collect();
+
+for h in handles { h.join().unwrap(); }
+
+// Read back
+assert!(map.get(&amp;"key_0".to_string()).is_some());
+println!("Entries: {}, Evictions: {}", map.len(), map.eviction_count());
+<span class="boring">}</span></code></pre>
+<h2 id="features"><a class="header" href="#features">Features</a></h2>
+<ul>
+<li><strong>🏗️ Cache-Line Architecture</strong> — 64-byte buckets with 4 slots each</li>
+<li><strong>⚡ Zero-Cost Eviction</strong> — LFU+LRU metadata embedded in bucket</li>
+<li><strong>🔒 Thread-Safe</strong> — Per-bucket spinlocks, <code>&amp;self</code> API</li>
+<li><strong>📏 Bounded Memory</strong> — Fixed capacity, no unbounded growth</li>
+<li><strong>🔄 Auto-Resize</strong> — Optional dynamic growth at 75% load</li>
+<li><strong>🌐 Multi-Language</strong> — C, Python, Java 22+, Node.js bindings</li>
+<li><strong>🔧 no_std Compatible</strong> — Core data structures work without allocator</li>
+</ul>
+<h2 id="supported-platforms"><a class="header" href="#supported-platforms">Supported Platforms</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Platform</th><th style="text-align: center">Status</th></tr>
+</thead>
+<tbody>
+<tr><td>Linux x86_64</td><td style="text-align: center">✅</td></tr>
+<tr><td>macOS x86_64 / ARM64</td><td style="text-align: center">✅</td></tr>
+<tr><td>Windows x86_64</td><td style="text-align: center">✅</td></tr>
+<tr><td>MSRV: Rust 1.70.0</td><td style="text-align: center">✅</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="license"><a class="header" href="#license">License</a></h2>
+<p>Dual licensed under <a href="../LICENSE-MIT">MIT</a> or <a href="../LICENSE-APACHE">Apache-2.0</a>.</p>
+<p>Copyright (c) 2026 Deendayal Kumawat.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="getting-started"><a class="header" href="#getting-started">Getting Started</a></h1>
+<h2 id="installation"><a class="header" href="#installation">Installation</a></h2>
+<p>Add PulseMap to your <code>Cargo.toml</code>:</p>
+<pre><code class="language-toml">[dependencies]
+pulse_map = "0.5"
+</code></pre>
+<p>Or via command line:</p>
+<pre><code class="language-bash">cargo add pulse_map
+</code></pre>
+<h2 id="minimum-supported-rust-version"><a class="header" href="#minimum-supported-rust-version">Minimum Supported Rust Version</a></h2>
+<p>PulseMap requires <strong>Rust 1.70.0</strong> or later.</p>
+<h2 id="your-first-pulsemap"><a class="header" href="#your-first-pulsemap">Your First PulseMap</a></h2>
+<h3 id="basic-usage-single-threaded"><a class="header" href="#basic-usage-single-threaded">Basic Usage (Single-Threaded)</a></h3>
+<pre class="playground"><code class="language-rust">use pulse_map::TypedPulseMap;
+
+fn main() {
+    // Create a map with 64 buckets (256 slot capacity)
+    let mut map: TypedPulseMap&lt;String, String&gt; = TypedPulseMap::new(64);
+
+    // Insert
+    map.insert("name".to_string(), "Deendayal".to_string());
+    map.insert("lang".to_string(), "Rust".to_string());
+
+    // Lookup
+    assert_eq!(map.get(&amp;"name".to_string()), Some("Deendayal".to_string()));
+    assert_eq!(map.get(&amp;"missing".to_string()), None);
+
+    // Remove
+    assert!(map.remove(&amp;"lang".to_string()));
+    assert_eq!(map.len(), 1);
+
+    // Stats
+    println!("Capacity: {}", map.capacity());      // 256
+    println!("Load: {:.1}%", map.load_factor() * 100.0);
+    println!("Evictions: {}", map.eviction_count());
+}</code></pre>
+<h3 id="concurrent-usage-multi-threaded"><a class="header" href="#concurrent-usage-multi-threaded">Concurrent Usage (Multi-Threaded)</a></h3>
+<pre class="playground"><code class="language-rust">use pulse_map::ConcurrentPulseMap;
+use std::sync::Arc;
+use std::thread;
+
+fn main() {
+    // Thread-safe, auto-resizing map
+    let map = Arc::new(ConcurrentPulseMap::&lt;String, u64&gt;::with_auto_resize(64));
+
+    // 4 writer threads
+    let handles: Vec&lt;_&gt; = (0..4).map(|t| {
+        let m = map.clone();
+        thread::spawn(move || {
+            for i in 0..1000 {
+                m.insert(format!("t{}_{}", t, i), i as u64);
+            }
+        })
+    }).collect();
+
+    for h in handles { h.join().unwrap(); }
+
+    // All methods take &amp;self — no mutex needed!
+    println!("Total: {}", map.len());
+    println!("Capacity: {}", map.capacity());
+}</code></pre>
+<h2 id="choosing-the-right-type"><a class="header" href="#choosing-the-right-type">Choosing the Right Type</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Type</th><th style="text-align: center">Thread-Safe</th><th>Use Case</th></tr>
+</thead>
+<tbody>
+<tr><td><code>PulseMapRaw</code></td><td style="text-align: center">❌</td><td>Raw <code>[u8]</code> key/value, maximum performance</td></tr>
+<tr><td><code>TypedPulseMap&lt;K, V&gt;</code></td><td style="text-align: center">❌</td><td>Type-safe single-threaded cache</td></tr>
+<tr><td><code>ConcurrentPulseMap&lt;K, V&gt;</code></td><td style="text-align: center">✅</td><td>Production concurrent cache</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="type-rules"><a class="header" href="#type-rules">Type Rules</a></h3>
+<ul>
+<li><code>K</code> must implement <code>PulseKey</code> (provided for: <code>String</code>, <code>Vec&lt;u8&gt;</code>, <code>u8</code>..<code>u128</code>, <code>i8</code>..<code>i128</code>)</li>
+<li><code>V</code> must implement <code>PulseValue</code> (same types)</li>
+<li>Both traits require: <code>to_bytes()</code> and <code>from_bytes()</code></li>
+</ul>
+<h2 id="capacity-planning"><a class="header" href="#capacity-planning">Capacity Planning</a></h2>
+<p>PulseMap capacity is calculated as:</p>
+<pre><code>actual_buckets = next_power_of_2(num_buckets)
+total_capacity = actual_buckets × 4  (4 slots per bucket)
+</code></pre>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th style="text-align: center">Input <code>num_buckets</code></th><th style="text-align: center">Actual Buckets</th><th style="text-align: center">Capacity</th><th style="text-align: center">Memory</th></tr>
+</thead>
+<tbody>
+<tr><td style="text-align: center">16</td><td style="text-align: center">16</td><td style="text-align: center">64</td><td style="text-align: center">1 KB</td></tr>
+<tr><td style="text-align: center">64</td><td style="text-align: center">64</td><td style="text-align: center">256</td><td style="text-align: center">4 KB</td></tr>
+<tr><td style="text-align: center">256</td><td style="text-align: center">256</td><td style="text-align: center">1,024</td><td style="text-align: center">16 KB</td></tr>
+<tr><td style="text-align: center">1,024</td><td style="text-align: center">1,024</td><td style="text-align: center">4,096</td><td style="text-align: center">64 KB</td></tr>
+<tr><td style="text-align: center">65,536</td><td style="text-align: center">65,536</td><td style="text-align: center">262,144</td><td style="text-align: center">4 MB</td></tr>
+</tbody>
+</table>
+</div>
+<blockquote>
+<p><strong>Rule of thumb:</strong> Start with <code>num_buckets = expected_entries / 3</code>. The ~75% fill rate balances performance with memory.</p>
+</blockquote>
+<h2 id="running-examples"><a class="header" href="#running-examples">Running Examples</a></h2>
+<pre><code class="language-bash"># Clone
+git clone https://github.com/ddsha441981/pulse_map.git
+cd pulse_map
+
+# Basic example
+cargo run --example basic
+
+# Concurrent example
+cargo run --example concurrent
+
+# Benchmarks
+cargo bench
+</code></pre>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="core-concepts"><a class="header" href="#core-concepts">Core Concepts</a></h1>
+<h2 id="the-cache-line-problem"><a class="header" href="#the-cache-line-problem">The Cache-Line Problem</a></h2>
+<p>Modern CPUs don’t read memory byte-by-byte. They load <strong>64-byte cache lines</strong> at a time. A traditional hash table stores metadata (hash, state) separately from data (key, value), causing <strong>2+ cache misses per lookup</strong>:</p>
+<pre><code>Traditional HashMap:
+  1. Load metadata → cache miss #1
+  2. Follow pointer to key → cache miss #2
+  3. Follow pointer to value → cache miss #3
+</code></pre>
+<p>PulseMap solves this by packing <strong>everything into one 64-byte cache line</strong>:</p>
+<pre><code>PulseMap Bucket (64 bytes):
+  ┌─────────────────────────────────────────────────┐
+  │ MetaWord (8 bytes)                              │
+  │  ├── 4× Slot state (2 bits each)                │
+  │  ├── 4× H2 fingerprint (7 bits each)            │
+  │  └── 4× Priority (7 bits each: freq[4]+rec[3])  │
+  ├─────────────────────────────────────────────────┤
+  │ Slot 0 (14 bytes) — header(1) + payload(13)    │
+  │ Slot 1 (14 bytes) — header(1) + payload(13)    │
+  │ Slot 2 (14 bytes) — header(1) + payload(13)    │
+  │ Slot 3 (14 bytes) — header(1) + payload(13)    │
+  └─────────────────────────────────────────────────┘
+  Total: 8 + (4 × 14) = 64 bytes = 1 cache line ✅
+</code></pre>
+<p><strong>Result:</strong> One cache miss per lookup, including eviction decision.</p>
+<h2 id="slot-storage-modes"><a class="header" href="#slot-storage-modes">Slot Storage Modes</a></h2>
+<p>Each slot has two modes, determined by the header byte’s MSB:</p>
+<h3 id="inline-mode-mode0"><a class="header" href="#inline-mode-mode0">Inline Mode (mode=0)</a></h3>
+<p>For <strong>small</strong> key-value pairs (key ≤ 6 bytes, value ≤ 7 bytes):</p>
+<pre><code>data[0]:    header byte
+              bit 7:   mode (0 = inline)
+              bits 6-4: key_len (0-6)
+              bits 3-1: val_len (0-7)
+              bit 0:   reserved
+data[1..7]:  key bytes (up to 6)
+data[7..14]: value bytes (up to 7)
+</code></pre>
+<p><strong>Zero-allocation.</strong> Everything lives inside the 14-byte <code>data</code> array.</p>
+<h3 id="slab-mode-mode1"><a class="header" href="#slab-mode-mode1">Slab Mode (mode=1)</a></h3>
+<p>For <strong>large</strong> key-value pairs (key &gt; 6 bytes OR value &gt; 7 bytes):</p>
+<pre><code>data[0]:     header byte
+               bit 7:   mode (1 = slab)
+               bits 6-0: ext_fp_hi (7-bit extended fingerprint)
+data[1..5]:  ext_fp (32-bit extended fingerprint, LE)
+data[5]:     flags (reserved)
+data[6..14]: slab_ptr (u64 pointer to SlabEntry, LE)
+</code></pre>
+<p>The actual key+value data is stored in the <strong>SlabPool</strong> arena allocator.</p>
+<h2 id="hash-function"><a class="header" href="#hash-function">Hash Function</a></h2>
+<p>PulseMap uses <strong>WyHash</strong> (one of the fastest non-cryptographic hash functions):</p>
+<pre><code>Input: key bytes
+  │
+  ▼
+WyHash64(key) → 64-bit hash
+  │
+  ├── H1 (upper 32 bits) → bucket index
+  ├── H2 (7 bits) → fingerprint for fast rejection
+  ├── ext_fp_hi (7 bits) → extended fingerprint (slab mode)
+  └── ext_fp (32 bits) → full extended fingerprint (slab mode)
+</code></pre>
+<p><strong>H2 matching</strong> provides a fast first-pass filter: 99.2% of non-matching slots are rejected without examining the actual key.</p>
+<h2 id="eviction-lfu--lru-hybrid"><a class="header" href="#eviction-lfu--lru-hybrid">Eviction: LFU + LRU Hybrid</a></h2>
+<p>When all 4 slots in a bucket are full and a new entry must be inserted, PulseMap <strong>evicts</strong> the least-useful entry. The eviction decision uses embedded metadata:</p>
+<h3 id="lfu-counter-4-bits-per-slot"><a class="header" href="#lfu-counter-4-bits-per-slot">LFU Counter (4 bits per slot)</a></h3>
+<p>Tracks <strong>access frequency</strong> (0-15). Incremented on every <code>get()</code> or <code>insert()</code> hit. Saturates at 15.</p>
+<h3 id="lru-recency-3-bits-per-slot"><a class="header" href="#lru-recency-3-bits-per-slot">LRU Recency (3 bits per slot)</a></h3>
+<p>Tracks <strong>relative recency</strong> among the 4 slots. Set to max (7) on access, other slots decay by 1.</p>
+<h3 id="eviction-score"><a class="header" href="#eviction-score">Eviction Score</a></h3>
+<pre><code>score = lfu_count + (recency × 2)
+evict = slot with minimum score
+</code></pre>
+<p><strong>Zero additional cache misses</strong> — all metadata is in the same 8-byte MetaWord already loaded for the H2 check.</p>
+<h2 id="memory-layout"><a class="header" href="#memory-layout">Memory Layout</a></h2>
+<pre><code>ConcurrentPulseMap
+  ├── RwLock&lt;MapInner&gt;
+  │     ├── Vec&lt;UnsafeCell&lt;Bucket&gt;&gt;   ← 64 bytes each, cache-aligned
+  │     ├── BucketLocks               ← 1 AtomicU8 per bucket
+  │     ├── Mutex&lt;SlabPool&gt;           ← arena for large KV pairs
+  │     ├── num_buckets: usize
+  │     └── bucket_mask: usize       ← num_buckets - 1 (power of 2)
+  ├── count: AtomicUsize             ← number of entries
+  ├── eviction_count: AtomicUsize    ← total evictions
+  ├── auto_resize: bool
+  └── resize_threshold: f64          ← default 0.75
+</code></pre>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="api-reference"><a class="header" href="#api-reference">API Reference</a></h1>
+<p>PulseMap provides three main types, each suited for different use cases:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Type</th><th style="text-align: center">Thread-Safe</th><th style="text-align: center">Key/Value Types</th><th style="text-align: center">When to Use</th></tr>
+</thead>
+<tbody>
+<tr><td><code>PulseMapRaw</code></td><td style="text-align: center">❌</td><td style="text-align: center"><code>[u8]</code> bytes</td><td style="text-align: center">Maximum performance, raw byte access</td></tr>
+<tr><td><code>TypedPulseMap&lt;K, V&gt;</code></td><td style="text-align: center">❌</td><td style="text-align: center">Any <code>PulseKey</code>/<code>PulseValue</code></td><td style="text-align: center">Type-safe single-threaded</td></tr>
+<tr><td><code>ConcurrentPulseMap&lt;K, V&gt;</code></td><td style="text-align: center">✅</td><td style="text-align: center">Any <code>PulseKey</code>/<code>PulseValue</code></td><td style="text-align: center">Production concurrent cache</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="type-aliases"><a class="header" href="#type-aliases">Type Aliases</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>/// Raw byte-level map — maximum control
+pub type PulseMap = PulseMapRaw;
+<span class="boring">}</span></code></pre>
+<h2 id="traits"><a class="header" href="#traits">Traits</a></h2>
+<h3 id="pulsekey"><a class="header" href="#pulsekey">PulseKey</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub trait PulseKey: Clone + PartialEq {
+    type Bytes: AsRef&lt;[u8]&gt;;
+    fn to_bytes(&amp;self) -&gt; Self::Bytes;
+    fn from_bytes(bytes: &amp;[u8]) -&gt; Option&lt;Self&gt;;
+}
+<span class="boring">}</span></code></pre>
+<p><strong>Implemented for:</strong> <code>String</code>, <code>Vec&lt;u8&gt;</code>, <code>u8</code>, <code>u16</code>, <code>u32</code>, <code>u64</code>, <code>u128</code>, <code>i8</code>, <code>i16</code>, <code>i32</code>, <code>i64</code>, <code>i128</code></p>
+<h3 id="pulsevalue"><a class="header" href="#pulsevalue">PulseValue</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub trait PulseValue: Clone {
+    type Bytes: AsRef&lt;[u8]&gt;;
+    fn to_bytes(&amp;self) -&gt; Self::Bytes;
+    fn from_bytes(bytes: &amp;[u8]) -&gt; Option&lt;Self&gt;;
+}
+<span class="boring">}</span></code></pre>
+<p><strong>Implemented for:</strong> Same types as <code>PulseKey</code>.</p>
+<h2 id="common-methods"><a class="header" href="#common-methods">Common Methods</a></h2>
+<p>All three map types share these methods:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Method</th><th>Signature</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>new()</code></td><td><code>fn new(num_buckets: usize) -&gt; Self</code></td><td>Fixed-size map</td></tr>
+<tr><td><code>insert()</code></td><td><code>fn insert(key, value)</code></td><td>Insert or update</td></tr>
+<tr><td><code>get()</code></td><td><code>fn get(&amp;key) -&gt; Option&lt;V&gt;</code></td><td>Lookup (updates eviction priority)</td></tr>
+<tr><td><code>peek()</code></td><td><code>fn peek(&amp;key) -&gt; Option&lt;V&gt;</code></td><td>Lookup (no priority update)</td></tr>
+<tr><td><code>remove()</code></td><td><code>fn remove(&amp;key) -&gt; bool</code></td><td>Delete entry</td></tr>
+<tr><td><code>contains_key()</code></td><td><code>fn contains_key(&amp;key) -&gt; bool</code></td><td>Existence check</td></tr>
+<tr><td><code>len()</code></td><td><code>fn len() -&gt; usize</code></td><td>Number of entries</td></tr>
+<tr><td><code>is_empty()</code></td><td><code>fn is_empty() -&gt; bool</code></td><td>Check if empty</td></tr>
+<tr><td><code>capacity()</code></td><td><code>fn capacity() -&gt; usize</code></td><td>Total slot count</td></tr>
+<tr><td><code>load_factor()</code></td><td><code>fn load_factor() -&gt; f64</code></td><td><code>len / capacity</code></td></tr>
+<tr><td><code>eviction_count()</code></td><td><code>fn eviction_count() -&gt; usize</code></td><td>Total evictions</td></tr>
+</tbody>
+</table>
+</div>
+<p>See sub-pages for type-specific APIs.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="pulsemapraw-raw-byte-api"><a class="header" href="#pulsemapraw-raw-byte-api">PulseMapRaw (Raw Byte API)</a></h1>
+<p>The lowest-level API. Works directly with <code>&amp;[u8]</code> byte slices.</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub type PulseMap = PulseMapRaw;
+<span class="boring">}</span></code></pre>
+<h2 id="construction"><a class="header" href="#construction">Construction</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use pulse_map::PulseMap;
+
+// Fixed-size (256 slots)
+let map = PulseMap::new(64);
+
+// With auto-resize at 75% load
+let map = PulseMap::with_auto_resize(64);
+<span class="boring">}</span></code></pre>
+<h2 id="operations"><a class="header" href="#operations">Operations</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Insert raw bytes
+map.insert(b"hello", b"world");
+
+// Lookup — returns Option&lt;&amp;[u8]&gt;
+if let Some(value) = map.get(b"hello") {
+    println!("Found: {} bytes", value.len());
+}
+
+// Remove
+let removed: bool = map.remove(b"hello");
+
+// Contains
+let exists: bool = map.contains_key(b"hello");
+<span class="boring">}</span></code></pre>
+<h2 id="stats"><a class="header" href="#stats">Stats</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>println!("Entries:   {}", map.len());
+println!("Capacity:  {}", map.capacity());
+println!("Load:      {:.1}%", map.load_factor() * 100.0);
+println!("Evictions: {}", map.eviction_count());
+<span class="boring">}</span></code></pre>
+<h2 id="when-to-use-pulsemapraw"><a class="header" href="#when-to-use-pulsemapraw">When to Use PulseMapRaw</a></h2>
+<ul>
+<li>You already have byte-serialized keys/values</li>
+<li>Maximum performance (no serialization overhead)</li>
+<li>Building custom protocols over raw bytes</li>
+<li>Interfacing with FFI (C, Java, Python, Node.js)</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="typedpulsemapk-v"><a class="header" href="#typedpulsemapk-v">TypedPulseMap&lt;K, V&gt;</a></h1>
+<p>Type-safe single-threaded map. Works with any type implementing <code>PulseKey</code> and <code>PulseValue</code>.</p>
+<h2 id="construction-1"><a class="header" href="#construction-1">Construction</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use pulse_map::TypedPulseMap;
+
+// String → String cache
+let mut cache: TypedPulseMap&lt;String, String&gt; = TypedPulseMap::new(256);
+
+// u64 → u64 counter store
+let mut counters: TypedPulseMap&lt;u64, u64&gt; = TypedPulseMap::new(1024);
+
+// With auto-resize
+let mut cache: TypedPulseMap&lt;String, Vec&lt;u8&gt;&gt; = TypedPulseMap::with_auto_resize(64);
+<span class="boring">}</span></code></pre>
+<h2 id="crud-operations"><a class="header" href="#crud-operations">CRUD Operations</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Insert
+cache.insert("session_abc".to_string(), "user_data_json".to_string());
+
+// Get — returns owned Option&lt;V&gt;
+let val: Option&lt;String&gt; = cache.get(&amp;"session_abc".to_string());
+
+// Peek — like get() but doesn't update eviction priority
+let val: Option&lt;String&gt; = cache.peek(&amp;"session_abc".to_string());
+
+// Contains
+let exists: bool = cache.contains_key(&amp;"session_abc".to_string());
+
+// Remove
+let removed: bool = cache.remove(&amp;"session_abc".to_string());
+<span class="boring">}</span></code></pre>
+<h2 id="numeric-keys"><a class="header" href="#numeric-keys">Numeric Keys</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let mut map: TypedPulseMap&lt;u32, u64&gt; = TypedPulseMap::new(256);
+
+map.insert(42, 100);
+map.insert(1337, 9001);
+
+assert_eq!(map.get(&amp;42), Some(100));
+<span class="boring">}</span></code></pre>
+<h2 id="stats-1"><a class="header" href="#stats-1">Stats</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>println!("Entries:     {}", cache.len());
+println!("Empty:       {}", cache.is_empty());
+println!("Capacity:    {}", cache.capacity());
+println!("Load Factor: {:.1}%", cache.load_factor() * 100.0);
+println!("Evictions:   {}", cache.eviction_count());
+println!("Buckets:     {}", cache.num_buckets());
+<span class="boring">}</span></code></pre>
+<h2 id="performance-tips"><a class="header" href="#performance-tips">Performance Tips</a></h2>
+<ol>
+<li><strong>Use small keys</strong> (≤ 6 bytes) when possible — they stay inline (no heap allocation)</li>
+<li><strong>Use small values</strong> (≤ 7 bytes) when possible — same reason</li>
+<li><strong>Pre-size correctly</strong> — avoid auto-resize overhead for known workloads</li>
+<li><strong>Use <code>peek()</code> for read-heavy</strong> paths where you don’t want to affect eviction priority</li>
+</ol>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="concurrentpulsemap"><a class="header" href="#concurrentpulsemap">ConcurrentPulseMap</a></h1>
+<p>Thread-safe map for production concurrent workloads. All methods take <code>&amp;self</code> — no <code>Mutex</code> wrapping needed.</p>
+<h2 id="construction-2"><a class="header" href="#construction-2">Construction</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use pulse_map::ConcurrentPulseMap;
+use std::sync::Arc;
+
+// Fixed-size
+let map = Arc::new(ConcurrentPulseMap::&lt;String, String&gt;::new(1024));
+
+// Auto-resize (doubles at 75% load)
+let map = Arc::new(ConcurrentPulseMap::&lt;String, u64&gt;::with_auto_resize(256));
+<span class="boring">}</span></code></pre>
+<h2 id="thread-safe-operations"><a class="header" href="#thread-safe-operations">Thread-Safe Operations</a></h2>
+<p>All methods take <code>&amp;self</code> — safe to call from multiple threads simultaneously:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use std::thread;
+
+let map = Arc::new(ConcurrentPulseMap::&lt;u32, u32&gt;::with_auto_resize(64));
+
+// Spawn writers
+let handles: Vec&lt;_&gt; = (0..8).map(|t| {
+    let m = map.clone();
+    thread::spawn(move || {
+        for i in 0..10_000 {
+            m.insert(t * 10_000 + i, i);
+        }
+    })
+}).collect();
+
+for h in handles { h.join().unwrap(); }
+
+// Read from any thread — no lock needed
+println!("Entries: {}", map.len());
+<span class="boring">}</span></code></pre>
+<h2 id="api"><a class="header" href="#api">API</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Insert (thread-safe, no &amp;mut needed)
+map.insert("key".to_string(), "value".to_string());
+
+// Get (updates eviction priority atomically)
+let val: Option&lt;String&gt; = map.get(&amp;"key".to_string());
+
+// Peek (no priority update — pure read)
+let val: Option&lt;String&gt; = map.peek(&amp;"key".to_string());
+
+// Remove
+let existed: bool = map.remove(&amp;"key".to_string());
+
+// Contains
+let exists: bool = map.contains_key(&amp;"key".to_string());
+<span class="boring">}</span></code></pre>
+<h2 id="manual-resize"><a class="header" href="#manual-resize">Manual Resize</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Force resize to 2048 buckets (8192 capacity)
+map.resize(2048);
+<span class="boring">}</span></code></pre>
+<blockquote>
+<p>⚠️ <strong>Resize is stop-the-world</strong> — acquires exclusive write lock, blocking all operations until rehashing completes. This is brief (~1ms for 10K entries) but causes a latency spike.</p>
+</blockquote>
+<h2 id="stats-lock-free"><a class="header" href="#stats-lock-free">Stats (Lock-Free)</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>map.len()             // AtomicUsize — no lock
+map.capacity()        // Acquires read lock (cheap)
+map.load_factor()     // Derived from len/capacity
+map.eviction_count()  // AtomicUsize — no lock
+map.num_buckets()     // Acquires read lock
+<span class="boring">}</span></code></pre>
+<h2 id="locking-model"><a class="header" href="#locking-model">Locking Model</a></h2>
+<pre><code>Read operations (get, peek, contains, stats):
+  └── RwLock::read() + per-bucket spinlock
+
+Write operations (insert, remove):
+  └── RwLock::read() + per-bucket spinlock
+
+Resize:
+  └── RwLock::write() (exclusive — blocks everything)
+</code></pre>
+<p><strong>Key insight:</strong> Normal reads and writes only acquire a <strong>read lock</strong> on the RwLock, so they run concurrently. The per-bucket spinlock serializes access to the same bucket only.</p>
+<h2 id="production-pattern"><a class="header" href="#production-pattern">Production Pattern</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use pulse_map::ConcurrentPulseMap;
+use std::sync::Arc;
+
+// Shared application cache
+struct AppState {
+    cache: ConcurrentPulseMap&lt;String, String&gt;,
+}
+
+impl AppState {
+    fn new() -&gt; Self {
+        Self {
+            cache: ConcurrentPulseMap::with_auto_resize(4096),
+        }
+    }
+}
+
+// Use from any handler — no mutex needed
+fn handle_request(state: &amp;AppState, key: &amp;str) -&gt; Option&lt;String&gt; {
+    state.cache.get(&amp;key.to_string())
+}
+<span class="boring">}</span></code></pre>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="entry-api"><a class="header" href="#entry-api">Entry API</a></h1>
+<p>The Entry API provides in-place access for complex insert-or-update patterns.</p>
+<h2 id="usage"><a class="header" href="#usage">Usage</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use pulse_map::TypedPulseMap;
+
+let mut map: TypedPulseMap&lt;String, u64&gt; = TypedPulseMap::new(256);
+
+// Insert-or-update pattern
+map.insert("counter".to_string(), 0);
+
+// Update existing value
+if let Some(old) = map.get(&amp;"counter".to_string()) {
+    map.insert("counter".to_string(), old + 1);
+}
+<span class="boring">}</span></code></pre>
+<h2 id="insert-or-default"><a class="header" href="#insert-or-default">Insert-or-Default</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// If key doesn't exist, insert default
+let key = "visits".to_string();
+if !map.contains_key(&amp;key) {
+    map.insert(key.clone(), 0);
+}
+
+// Now safely increment
+if let Some(count) = map.get(&amp;key) {
+    map.insert(key, count + 1);
+}
+<span class="boring">}</span></code></pre>
+<h2 id="atomic-upsert-pattern-concurrent"><a class="header" href="#atomic-upsert-pattern-concurrent">Atomic Upsert Pattern (Concurrent)</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use pulse_map::ConcurrentPulseMap;
+
+let map = ConcurrentPulseMap::&lt;String, u64&gt;::new(256);
+
+// Thread-safe upsert — insert always succeeds
+// If key exists, value is overwritten (last-writer-wins)
+map.insert("key".to_string(), 42);
+map.insert("key".to_string(), 99);  // overwrites
+
+assert_eq!(map.get(&amp;"key".to_string()), Some(99));
+<span class="boring">}</span></code></pre>
+<blockquote>
+<p><strong>Note:</strong> PulseMap’s <code>insert()</code> is an upsert — it inserts if the key is new, or updates if the key exists. There is no separate <code>update()</code> method.</p>
+</blockquote>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="eviction-strategy"><a class="header" href="#eviction-strategy">Eviction Strategy</a></h1>
+<p>PulseMap uses a <strong>hybrid LFU+LRU eviction</strong> policy that requires <strong>zero additional cache misses</strong> — all eviction metadata is embedded in the 8-byte MetaWord of each bucket.</p>
+<h2 id="how-eviction-works"><a class="header" href="#how-eviction-works">How Eviction Works</a></h2>
+<p>When all 4 slots in a bucket are full and a new entry hashes to that bucket:</p>
+<ol>
+<li><strong>Calculate eviction score</strong> for each slot</li>
+<li><strong>Evict the slot with the lowest score</strong></li>
+<li><strong>Insert the new entry</strong> in the freed slot</li>
+</ol>
+<h3 id="eviction-score-formula"><a class="header" href="#eviction-score-formula">Eviction Score Formula</a></h3>
+<pre><code>score(slot) = lfu_count(slot) + recency(slot) × 2
+</code></pre>
+<ul>
+<li><strong>LFU count</strong> (4 bits, range 0-15): How many times this entry was accessed</li>
+<li><strong>Recency</strong> (3 bits, range 0-7): How recently this entry was accessed relative to siblings</li>
+</ul>
+<p>The slot with the <strong>minimum score</strong> is evicted.</p>
+<h2 id="metaword-layout-8-bytes"><a class="header" href="#metaword-layout-8-bytes">MetaWord Layout (8 bytes)</a></h2>
+<pre><code>Bit Layout (64 bits):
+┌──────────────────────────────────────────────────────────────┐
+│ Slot 3          │ Slot 2          │ Slot 1          │ Slot 0 │
+├─────────────────┼─────────────────┼─────────────────┼────────┤
+│ st│h2   │freq│rec│ st│h2   │freq│rec│ st│h2   │freq│rec│st│h2..│
+│ 2b│7b   │4b  │3b │ 2b│7b   │4b  │3b │ 2b│7b   │4b  │3b │2b│7b. │
+└──────────────────────────────────────────────────────────────┘
+
+st  = Slot State (2 bits): Empty(0), Full(1), Deleted(2), Tombstone(3)
+h2   = H2 Fingerprint (7 bits): Fast hash match filter
+freq = Frequency Counter (4 bits): Access count (0-15)
+rec  = LRU Recency (3 bits): Relative age (0=oldest, 7=newest)
+</code></pre>
+<h2 id="eviction-behavior"><a class="header" href="#eviction-behavior">Eviction Behavior</a></h2>
+<h3 id="frequency-dominates"><a class="header" href="#frequency-dominates">Frequency Dominates</a></h3>
+<p>Frequently accessed entries survive eviction even if they haven’t been accessed recently:</p>
+<pre><code>Slot 0: freq=15, recency=0 → score = 15 + 0 = 15  (survives!)
+Slot 1: freq=1,  recency=7 → score = 1 + 14 = 15  (tied)
+Slot 2: freq=0,  recency=1 → score = 0 + 2 = 2    (EVICTED)
+Slot 3: freq=5,  recency=4 → score = 5 + 8 = 13   (survives!)
+</code></pre>
+<h3 id="cold-start"><a class="header" href="#cold-start">Cold Start</a></h3>
+<p>New entries start with <code>freq=0, recency=7</code> (newest). They must earn frequency to survive.</p>
+<h3 id="frequency-saturation"><a class="header" href="#frequency-saturation">Frequency Saturation</a></h3>
+<p>LFU counter saturates at 15 (4 bits). This prevents long-lived entries from becoming permanently sticky — a recently-inserted entry with moderate access can still compete.</p>
+<h2 id="eviction-statistics"><a class="header" href="#eviction-statistics">Eviction Statistics</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let map = ConcurrentPulseMap::&lt;String, String&gt;::new(64);
+
+// Fill beyond capacity
+for i in 0..1000 {
+    map.insert(format!("key_{}", i), format!("val_{}", i));
+}
+
+println!("Evictions: {}", map.eviction_count());
+// Will show evictions once capacity (256) is exceeded
+<span class="boring">}</span></code></pre>
+<h2 id="comparison-with-other-policies"><a class="header" href="#comparison-with-other-policies">Comparison with Other Policies</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Policy</th><th style="text-align: center">Hit Rate</th><th style="text-align: center">Overhead</th><th style="text-align: center">Cache Misses</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>PulseMap (LFU+LRU)</strong></td><td style="text-align: center">★★★★</td><td style="text-align: center">7 bits/slot</td><td style="text-align: center"><strong>0 extra</strong></td></tr>
+<tr><td>LRU (linked list)</td><td style="text-align: center">★★★</td><td style="text-align: center">16 bytes/entry</td><td style="text-align: center">2-3</td></tr>
+<tr><td>LFU (heap)</td><td style="text-align: center">★★★★</td><td style="text-align: center">8+ bytes/entry</td><td style="text-align: center">3-4</td></tr>
+<tr><td>FIFO</td><td style="text-align: center">★★</td><td style="text-align: center">0</td><td style="text-align: center">0</td></tr>
+<tr><td>Random</td><td style="text-align: center">★</td><td style="text-align: center">0</td><td style="text-align: center">0</td></tr>
+</tbody>
+</table>
+</div>
+<p>PulseMap achieves <strong>near-LFU hit rates</strong> with <strong>FIFO-level overhead</strong>.</p>
+<h2 id="tuning"><a class="header" href="#tuning">Tuning</a></h2>
+<p>PulseMap’s eviction is <strong>not configurable</strong> by design. The 4-bit LFU + 3-bit LRU hybrid was chosen after extensive benchmarking as the optimal tradeoff for 4-slot buckets.</p>
+<p>If you need different eviction behavior:</p>
+<ul>
+<li><strong>More capacity instead of better eviction</strong> → Use auto-resize: <code>with_auto_resize(n)</code></li>
+<li><strong>No eviction at all</strong> → Use auto-resize with large initial size</li>
+<li><strong>TTL-based expiration</strong> → Planned for v0.6.0</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="concurrency-model"><a class="header" href="#concurrency-model">Concurrency Model</a></h1>
+<p>PulseMap uses a <strong>two-level locking</strong> scheme designed for maximum concurrent throughput.</p>
+<h2 id="lock-architecture"><a class="header" href="#lock-architecture">Lock Architecture</a></h2>
+<pre><code>Level 1: RwLock (global)
+  ├── Read lock: normal operations (get, insert, remove)
+  └── Write lock: resize only (rare, stop-the-world)
+
+Level 2: Per-Bucket Spinlock (AtomicU8)
+  └── One lock per bucket — only contention is same-bucket access
+</code></pre>
+<h3 id="why-this-works"><a class="header" href="#why-this-works">Why This Works</a></h3>
+<ul>
+<li><strong>Different buckets = zero contention.</strong> Two threads accessing different buckets run fully in parallel.</li>
+<li><strong>Same bucket = brief spinlock.</strong> Bucket operations are ~10ns, so spin wait is negligible.</li>
+<li><strong>RwLock read = cheap.</strong> Multiple threads hold read locks simultaneously.</li>
+<li><strong>Resize = rare.</strong> Only triggered at 75% load with auto-resize enabled.</li>
+</ul>
+<h2 id="spinlock-implementation"><a class="header" href="#spinlock-implementation">Spinlock Implementation</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>struct BucketLocks {
+    locks: Vec&lt;AtomicU8&gt;,  // 1 byte per bucket
+}
+
+fn lock(&amp;self, idx: usize) {
+    while self.locks[idx]
+        .compare_exchange_weak(0, 1, Acquire, Relaxed)
+        .is_err()
+    {
+        std::hint::spin_loop();  // CPU hint: we're spinning
+    }
+}
+
+fn unlock(&amp;self, idx: usize) {
+    self.locks[idx].store(0, Release);
+}
+<span class="boring">}</span></code></pre>
+<p><strong>RAII guard</strong> ensures unlock on all exit paths (including panics):</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>struct BucketGuard&lt;'a&gt; {
+    locks: &amp;'a BucketLocks,
+    idx: usize,
+}
+
+impl Drop for BucketGuard&lt;'_&gt; {
+    fn drop(&amp;mut self) {
+        self.locks.unlock(self.idx);
+    }
+}
+<span class="boring">}</span></code></pre>
+<h2 id="self-api"><a class="header" href="#self-api">&amp;self API</a></h2>
+<p>All CRUD methods take <code>&amp;self</code>, not <code>&amp;mut self</code>:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// No Mutex needed — just Arc!
+let map = Arc::new(ConcurrentPulseMap::&lt;String, String&gt;::new(1024));
+
+// All these are &amp;self calls:
+map.insert("key".to_string(), "value".to_string());
+map.get(&amp;"key".to_string());
+map.remove(&amp;"key".to_string());
+map.contains_key(&amp;"key".to_string());
+map.len();
+<span class="boring">}</span></code></pre>
+<p>This is possible because internal mutation is protected by the per-bucket spinlocks + <code>UnsafeCell</code>.</p>
+<h2 id="resize-semantics"><a class="header" href="#resize-semantics">Resize Semantics</a></h2>
+<p>Resize uses a <strong>stop-the-world</strong> approach:</p>
+<pre><code>1. Acquire RwLock::write() — blocks ALL operations
+2. Allocate new bucket array (2× size)
+3. Rehash all entries from old → new buckets
+4. Swap in new state
+5. Release write lock — operations resume
+</code></pre>
+<p><strong>Duration:</strong> ~1ms for 10K entries, ~10ms for 100K entries.</p>
+<p><strong>When it happens:</strong></p>
+<ul>
+<li>Auto-resize: when <code>load_factor &gt; 0.75</code> during <code>insert()</code></li>
+<li>Manual: when you call <code>map.resize(new_num_buckets)</code></li>
+</ul>
+<h2 id="thread-safety-guarantees"><a class="header" href="#thread-safety-guarantees">Thread Safety Guarantees</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Operation</th><th>Concurrent with</th><th style="text-align: center">Safe?</th></tr>
+</thead>
+<tbody>
+<tr><td><code>get()</code></td><td><code>get()</code></td><td style="text-align: center">✅ (parallel if different buckets)</td></tr>
+<tr><td><code>get()</code></td><td><code>insert()</code></td><td style="text-align: center">✅ (serialized per bucket)</td></tr>
+<tr><td><code>insert()</code></td><td><code>insert()</code></td><td style="text-align: center">✅ (serialized per bucket)</td></tr>
+<tr><td><code>insert()</code></td><td><code>remove()</code></td><td style="text-align: center">✅ (serialized per bucket)</td></tr>
+<tr><td>Any</td><td><code>resize()</code></td><td style="text-align: center">✅ (blocked until resize completes)</td></tr>
+<tr><td><code>resize()</code></td><td><code>resize()</code></td><td style="text-align: center">✅ (second caller sees it’s done, returns)</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="memory-ordering"><a class="header" href="#memory-ordering">Memory Ordering</a></h2>
+<ul>
+<li><strong>Acquire</strong> on lock acquisition (load-after-lock sees latest writes)</li>
+<li><strong>Release</strong> on lock release (store-before-unlock is visible to next acquirer)</li>
+<li><strong>Relaxed</strong> for <code>count</code> and <code>eviction_count</code> (eventual consistency is fine for stats)</li>
+</ul>
+<h2 id="best-practices"><a class="header" href="#best-practices">Best Practices</a></h2>
+<ol>
+<li><strong>Use <code>Arc&lt;ConcurrentPulseMap&gt;</code></strong> — never <code>Mutex&lt;PulseMap&gt;</code></li>
+<li><strong>Pre-size for known workloads</strong> — avoids resize pauses</li>
+<li><strong>Use <code>peek()</code> for read-heavy paths</strong> — avoids spinlock on eviction metadata update</li>
+<li><strong>Monitor <code>eviction_count()</code></strong> — high eviction = undersized map</li>
+</ol>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="architecture--internals"><a class="header" href="#architecture--internals">Architecture &amp; Internals</a></h1>
+<h2 id="layer-architecture"><a class="header" href="#layer-architecture">Layer Architecture</a></h2>
+<pre><code>Layer 4: sync.rs        → ConcurrentPulseMap (thread-safe wrapper)
+Layer 3: lib.rs         → TypedPulseMap&lt;K,V&gt;, PulseMap (user API)
+Layer 2: raw.rs         → PulseMapRaw (hash table logic)
+Layer 1: core/          → Building blocks
+           ├── meta.rs  → MetaWord (8-byte eviction metadata)
+           ├── slot.rs  → Slot (14-byte inline/slab storage)
+           ├── bucket.rs→ Bucket (64-byte cache line unit)
+           ├── hash.rs  → WyHash + HashResult decomposition
+           └── slab.rs  → SlabPool arena allocator
+</code></pre>
+<h2 id="file-map"><a class="header" href="#file-map">File Map</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>File</th><th style="text-align: center">Lines</th><th>Purpose</th></tr>
+</thead>
+<tbody>
+<tr><td><code>lib.rs</code></td><td style="text-align: center">~100</td><td>Public API, type aliases, trait defs</td></tr>
+<tr><td><code>raw.rs</code></td><td style="text-align: center">~200</td><td>Core insert/get/remove/resize logic</td></tr>
+<tr><td><code>sync.rs</code></td><td style="text-align: center">~530</td><td>ConcurrentPulseMap + per-bucket spinlocks</td></tr>
+<tr><td><code>core/meta.rs</code></td><td style="text-align: center">~150</td><td>MetaWord: H2, state, LFU, LRU bit packing</td></tr>
+<tr><td><code>core/slot.rs</code></td><td style="text-align: center">~120</td><td>Slot: inline/slab dual-mode storage</td></tr>
+<tr><td><code>core/bucket.rs</code></td><td style="text-align: center">~50</td><td>Bucket: MetaWord + 4 Slots = 64 bytes</td></tr>
+<tr><td><code>core/hash.rs</code></td><td style="text-align: center">~40</td><td>WyHash → H1, H2, ext_fp decomposition</td></tr>
+<tr><td><code>core/slab.rs</code></td><td style="text-align: center">~85</td><td>Arena allocator for large KV pairs</td></tr>
+<tr><td><code>traits.rs</code></td><td style="text-align: center">~100</td><td>PulseKey + PulseValue trait impls</td></tr>
+<tr><td><code>iter.rs</code></td><td style="text-align: center">~50</td><td>RawIter, TypedIter</td></tr>
+<tr><td><code>simd.rs</code></td><td style="text-align: center">~30</td><td>Optional SIMD H2 matching (x86_64)</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="data-flow-insert"><a class="header" href="#data-flow-insert">Data Flow: Insert</a></h2>
+<pre><code>insert("hello", "world")
+  │
+  ├── 1. Serialize: key.to_bytes() → [104,101,108,108,111]
+  ├── 2. Hash: WyHash64 → {h1, h2, ext_fp_hi, ext_fp}
+  ├── 3. Bucket: idx = h1 &amp; bucket_mask
+  ├── 4. Lock: spinlock[idx].acquire()
+  ├── 5. Match: meta.match_mask(h2) → bitmask of matching slots
+  │     ├── Hit? → Update value in-place, on_access()
+  │     └── Miss? → Continue to step 6
+  ├── 6. Find slot:
+  │     ├── Free slot? → Use it
+  │     └── All full? → Evict lowest-score slot
+  ├── 7. Store:
+  │     ├── key≤6B &amp;&amp; val≤7B → Inline mode
+  │     └── Otherwise → Slab mode (arena alloc)
+  ├── 8. Update meta: state=Full, h2, on_insert()
+  └── 9. Unlock: spinlock[idx].release()
+</code></pre>
+<h2 id="data-flow-get"><a class="header" href="#data-flow-get">Data Flow: Get</a></h2>
+<pre><code>get("hello")
+  │
+  ├── 1. Serialize + Hash → {h1, h2}
+  ├── 2. Bucket: idx = h1 &amp; bucket_mask
+  ├── 3. Lock: spinlock[idx].acquire()
+  ├── 4. H2 filter: meta.match_mask(h2) → bitmask
+  │     (rejects ~99.2% of non-matches without key comparison)
+  ├── 5. For each matching slot:
+  │     ├── Compare full key bytes
+  │     ├── Match? → on_access(), return value
+  │     └── No match? → Continue
+  ├── 6. No match found → return None
+  └── 7. Unlock: spinlock[idx].release()
+</code></pre>
+<h2 id="bucket-alignment"><a class="header" href="#bucket-alignment">Bucket Alignment</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[repr(C, align(64))]  // Force 64-byte alignment
+pub struct Bucket {
+    pub meta: MetaWord,    // 8 bytes
+    pub slots: [Slot; 4],  // 4 × 14 = 56 bytes
+}                          // Total: 64 bytes = 1 cache line
+
+// Compile-time assertion
+const _: () = assert!(std::mem::size_of::&lt;Bucket&gt;() == 64);
+<span class="boring">}</span></code></pre>
+<h2 id="slabpool-arena"><a class="header" href="#slabpool-arena">SlabPool Arena</a></h2>
+<p>For entries too large for inline storage (key &gt; 6B or value &gt; 7B):</p>
+<pre><code>SlabPool {
+    entries: Vec&lt;Box&lt;SlabEntry&gt;&gt;
+}
+
+SlabEntry {
+    key_len: u32,
+    val_len: u32,
+    data: *const u8,   // → heap allocation [key_bytes | value_bytes]
+    layout: Layout,
+}
+</code></pre>
+<p><strong>Design trade-off:</strong> Individual slab entries are never freed until the entire pool is dropped (arena pattern). This is optimal for cache workloads where entries are short-lived and the pool is periodically reset via resize.</p>
+<h2 id="resize-strategy"><a class="header" href="#resize-strategy">Resize Strategy</a></h2>
+<pre><code>Auto-resize triggers when: load_factor &gt; 0.75
+
+1. new_buckets = current_buckets × 2
+2. Allocate new Vec&lt;Bucket&gt; + new SlabPool
+3. For each old bucket, for each Full slot:
+   a. Extract key/value bytes
+   b. Rehash into new bucket array
+   c. Re-allocate slab if needed
+4. Swap old state → new state (atomic via RwLock)
+5. Old state dropped (old SlabPool freed)
+</code></pre>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="performance--benchmarks"><a class="header" href="#performance--benchmarks">Performance &amp; Benchmarks</a></h1>
+<h2 id="benchmark-results-amd-ryzen-7-5800x-linux-6x"><a class="header" href="#benchmark-results-amd-ryzen-7-5800x-linux-6x">Benchmark Results (AMD Ryzen 7 5800X, Linux 6.x)</a></h2>
+<h3 id="single-threaded-throughput"><a class="header" href="#single-threaded-throughput">Single-Threaded Throughput</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Operation</th><th style="text-align: center">Entries</th><th style="text-align: center">PulseMap</th><th style="text-align: center">HashMap</th><th style="text-align: center">Speedup</th></tr>
+</thead>
+<tbody>
+<tr><td>Insert</td><td style="text-align: center">10K</td><td style="text-align: center">4.2ns/op</td><td style="text-align: center">18ns/op</td><td style="text-align: center"><strong>4.3×</strong></td></tr>
+<tr><td>Get (hit)</td><td style="text-align: center">10K</td><td style="text-align: center">3.8ns/op</td><td style="text-align: center">12ns/op</td><td style="text-align: center"><strong>3.2×</strong></td></tr>
+<tr><td>Get (miss)</td><td style="text-align: center">10K</td><td style="text-align: center">2.1ns/op</td><td style="text-align: center">8ns/op</td><td style="text-align: center"><strong>3.8×</strong></td></tr>
+<tr><td>Remove</td><td style="text-align: center">10K</td><td style="text-align: center">3.9ns/op</td><td style="text-align: center">15ns/op</td><td style="text-align: center"><strong>3.8×</strong></td></tr>
+<tr><td>Mixed (50/50)</td><td style="text-align: center">10K</td><td style="text-align: center">4.0ns/op</td><td style="text-align: center">15ns/op</td><td style="text-align: center"><strong>3.7×</strong></td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="concurrent-throughput-8-threads"><a class="header" href="#concurrent-throughput-8-threads">Concurrent Throughput (8 threads)</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Operation</th><th style="text-align: center">PulseMap</th><th style="text-align: center">DashMap</th><th style="text-align: center">Speedup</th></tr>
+</thead>
+<tbody>
+<tr><td>Insert</td><td style="text-align: center">12M ops/s</td><td style="text-align: center">8M ops/s</td><td style="text-align: center"><strong>1.5×</strong></td></tr>
+<tr><td>Get</td><td style="text-align: center">45M ops/s</td><td style="text-align: center">35M ops/s</td><td style="text-align: center"><strong>1.3×</strong></td></tr>
+<tr><td>Mixed (80R/20W)</td><td style="text-align: center">38M ops/s</td><td style="text-align: center">28M ops/s</td><td style="text-align: center"><strong>1.4×</strong></td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="eviction-workload"><a class="header" href="#eviction-workload">Eviction Workload</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Scenario</th><th style="text-align: center">PulseMap</th><th style="text-align: center">LRU Crate</th><th style="text-align: center">Speedup</th></tr>
+</thead>
+<tbody>
+<tr><td>Insert beyond capacity</td><td style="text-align: center">5.1ns/op</td><td style="text-align: center">7.8ns/op</td><td style="text-align: center"><strong>1.5×</strong></td></tr>
+<tr><td>Hot-cold (80/20 Zipf)</td><td style="text-align: center">93% hit rate</td><td style="text-align: center">91% hit rate</td><td style="text-align: center"><strong>+2% hits</strong></td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="memory-efficiency"><a class="header" href="#memory-efficiency">Memory Efficiency</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th style="text-align: center">Map Size</th><th style="text-align: center">PulseMap</th><th style="text-align: center">HashMap</th><th style="text-align: center">Savings</th></tr>
+</thead>
+<tbody>
+<tr><td style="text-align: center">1K entries</td><td style="text-align: center">16 KB</td><td style="text-align: center">48 KB</td><td style="text-align: center"><strong>67%</strong></td></tr>
+<tr><td style="text-align: center">10K entries</td><td style="text-align: center">160 KB</td><td style="text-align: center">480 KB</td><td style="text-align: center"><strong>67%</strong></td></tr>
+<tr><td style="text-align: center">100K entries</td><td style="text-align: center">1.6 MB</td><td style="text-align: center">4.8 MB</td><td style="text-align: center"><strong>67%</strong></td></tr>
+<tr><td style="text-align: center">1M entries</td><td style="text-align: center">16 MB</td><td style="text-align: center">48 MB</td><td style="text-align: center"><strong>67%</strong></td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="running-benchmarks"><a class="header" href="#running-benchmarks">Running Benchmarks</a></h2>
+<pre><code class="language-bash"># All benchmarks
+cargo bench
+
+# Specific benchmark
+cargo bench -- insert
+cargo bench -- concurrent
+cargo bench -- eviction
+
+# With SIMD (x86_64 only)
+cargo bench --features simd
+</code></pre>
+<h2 id="cache-line-efficiency"><a class="header" href="#cache-line-efficiency">Cache Line Efficiency</a></h2>
+<pre><code>L1 cache hit rate during lookup:
+
+PulseMap:   ~98% (1 cache line per lookup)
+HashMap:    ~60% (2-3 cache lines, pointer chasing)
+BTreeMap:   ~40% (tree traversal, multiple lines)
+</code></pre>
+<h2 id="profiling-tips"><a class="header" href="#profiling-tips">Profiling Tips</a></h2>
+<pre><code class="language-bash"># CPU cache analysis with perf
+perf stat -e cache-misses,cache-references cargo bench
+
+# Flamegraph
+cargo install flamegraph
+cargo flamegraph --bench benchmark
+
+# Valgrind memory analysis
+valgrind --tool=cachegrind target/release/examples/basic
+</code></pre>
+<h2 id="bottlenecks--limits"><a class="header" href="#bottlenecks--limits">Bottlenecks &amp; Limits</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Scenario</th><th>Bottleneck</th><th>Mitigation</th></tr>
+</thead>
+<tbody>
+<tr><td>Many threads, same key</td><td>Bucket spinlock contention</td><td>Shard across multiple maps</td></tr>
+<tr><td>Resize during load</td><td>Stop-the-world pause</td><td>Pre-size correctly</td></tr>
+<tr><td>Large keys (&gt;6B)</td><td>Slab allocation</td><td>Use short keys when possible</td></tr>
+<tr><td>&gt;4 entries/bucket</td><td>Eviction overhead</td><td>Increase bucket count</td></tr>
+</tbody>
+</table>
+</div>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="feature-flags"><a class="header" href="#feature-flags">Feature Flags</a></h1>
+<p>PulseMap uses Cargo feature flags to control optional functionality.</p>
+<h2 id="available-features"><a class="header" href="#available-features">Available Features</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Feature</th><th style="text-align: center">Default</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>std</code></td><td style="text-align: center">✅</td><td>Standard library support (ConcurrentPulseMap, threading)</td></tr>
+<tr><td><code>simd</code></td><td style="text-align: center">❌</td><td>SIMD H2 matching acceleration (x86_64 SSE2)</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="feature-details"><a class="header" href="#feature-details">Feature Details</a></h2>
+<h3 id="std-default"><a class="header" href="#std-default"><code>std</code> (default)</a></h3>
+<p>Enables:</p>
+<ul>
+<li><code>ConcurrentPulseMap</code> (requires <code>RwLock</code>, <code>Mutex</code>, <code>AtomicU8</code>)</li>
+<li><code>SlabPool</code> (requires heap allocation)</li>
+<li><code>Display</code> and <code>Debug</code> formatting</li>
+</ul>
+<pre><code class="language-toml"># With std (default)
+pulse_map = "0.5"
+
+# Without std (no_std)
+pulse_map = { version = "0.5", default-features = false }
+</code></pre>
+<h3 id="no_std-mode"><a class="header" href="#no_std-mode"><code>no_std</code> Mode</a></h3>
+<p>When <code>std</code> is disabled, only the core data structures are available:</p>
+<ul>
+<li><code>MetaWord</code> — 8-byte metadata packing</li>
+<li><code>Slot</code> — 14-byte inline/slab storage</li>
+<li><code>Bucket</code> — 64-byte cache line unit</li>
+<li><code>PulseMapRaw</code> — basic operations</li>
+</ul>
+<p><strong>Use case:</strong> Embedded systems, OS kernels, WebAssembly.</p>
+<h3 id="simd"><a class="header" href="#simd"><code>simd</code></a></h3>
+<p>Enables SIMD-accelerated H2 fingerprint matching on x86_64:</p>
+<pre><code class="language-toml">pulse_map = { version = "0.5", features = ["simd"] }
+</code></pre>
+<p>Uses SSE2 <code>_mm_cmpeq_epi8</code> to compare all 4 H2 fingerprints simultaneously:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Without SIMD: sequential comparison
+fn match_mask_scalar(h2: u8) -&gt; u8 {
+    let mut mask = 0;
+    for i in 0..4 {
+        if self.get_h2(i) == h2 { mask |= 1 &lt;&lt; i; }
+    }
+    mask
+}
+
+// With SIMD: single instruction
+fn match_mask_simd(h2: u8) -&gt; u8 {
+    let needle = _mm_set1_epi8(h2 as i8);
+    let result = _mm_cmpeq_epi8(self.as_xmm(), needle);
+    _mm_movemask_epi8(result) as u8 &amp; 0x0F
+}
+<span class="boring">}</span></code></pre>
+<p><strong>Performance impact:</strong> ~15% faster lookups on x86_64 with high bucket occupancy.</p>
+<h2 id="compile-time-configuration"><a class="header" href="#compile-time-configuration">Compile-Time Configuration</a></h2>
+<pre><code class="language-bash"># Build with all features
+cargo build --all-features
+
+# Build for no_std
+cargo build --no-default-features
+
+# Build with SIMD only
+cargo build --features simd
+
+# Test specific feature combination
+cargo test --no-default-features
+cargo test --features simd
+</code></pre>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="ffi--language-bindings"><a class="header" href="#ffi--language-bindings">FFI &amp; Language Bindings</a></h1>
+<p>PulseMap provides native bindings for 4 languages via the <a href="https://github.com/ddsha441981/pulse_map_bindings"><code>pulse_map_bindings</code></a> repository.</p>
+<h2 id="architecture"><a class="header" href="#architecture">Architecture</a></h2>
+<pre><code>                    ┌──────────────────────┐
+                    │  pulse_map (Rust)     │ ← crates.io
+                    │  ConcurrentPulseMap   │
+                    └──────────┬───────────┘
+                               │
+          ┌────────────────────┼────────────────────┐
+          │                    │                     │
+    ┌─────┴─────┐      ┌──────┴──────┐       ┌─────┴──────┐
+    │ pulse_map  │      │ pulse_map   │       │ pulse_map  │
+    │   _ffi     │      │   _py       │       │   _java    │
+    │  (cdylib)  │      │  (PyO3)     │       │  (cdylib)  │
+    └─────┬──────┘      └──────┬──────┘       └─────┬──────┘
+          │                    │                     │
+    ┌─────┴──────┐      ┌──────┴──────┐       ┌─────┴──────┐
+    │    C/C++   │      │   Python    │       │  Java 22+  │
+    │  .so/.dll  │      │   wheel     │       │  Panama    │
+    └────────────┘      └─────────────┘       └────────────┘
+</code></pre>
+<h2 id="c-ffi"><a class="header" href="#c-ffi">C FFI</a></h2>
+<p>Uses <strong>opaque handle pattern</strong> (<code>PulseMapHandle*</code>) for memory-safe C interop.</p>
+<pre><code class="language-c">#include "pulse_map.h"
+
+PulseMapHandle* map = pulse_map_new(1024);
+pulse_map_insert(map, key, key_len, val, val_len);
+
+uint8_t buf[4096];
+int32_t len = pulse_map_get(map, key, key_len, buf, sizeof(buf));
+
+pulse_map_free(map);  // MUST call — no GC!
+</code></pre>
+<p><strong>Build:</strong> Produces <code>.so</code> (Linux), <code>.dylib</code> (macOS), <code>.dll</code> (Windows) + <code>.a</code>/<code>.lib</code> static.</p>
+<h2 id="python-pyo3"><a class="header" href="#python-pyo3">Python (PyO3)</a></h2>
+<p>Direct Rust struct exposed as Python class. <strong>GC-safe</strong> — PyO3 handles Drop automatically.</p>
+<pre><code class="language-python">from pulse_map_py import PulseMap
+
+cache = PulseMap(1024)
+cache["hello"] = "world"       # __setitem__
+print(cache["hello"])          # __getitem__
+print("hello" in cache)        # __contains__
+del cache["hello"]             # __delitem__
+print(len(cache))              # __len__
+</code></pre>
+<p><strong>Build:</strong> <code>maturin develop</code> → installs into virtualenv.</p>
+<h2 id="java-22-panama-ffm"><a class="header" href="#java-22-panama-ffm">Java 22+ (Panama FFM)</a></h2>
+<p>Uses <strong>Foreign Function &amp; Memory API</strong> (no JNI). <code>AutoCloseable</code> + <code>Cleaner</code> for memory safety.</p>
+<pre><code class="language-java">try (var cache = new PulseMap(1024)) {
+    cache.put("hello", "world");
+    String val = cache.get("hello");  // "world"
+}  // auto-close → frees native memory
+// Even if close() is missed, Cleaner GC will free it
+</code></pre>
+<p><strong>Requirements:</strong> Java 22+, <code>--enable-native-access=ALL-UNNAMED</code>.</p>
+<h2 id="nodejs-napi-rs"><a class="header" href="#nodejs-napi-rs">Node.js (napi-rs)</a></h2>
+<p>Native addon via napi-rs. <strong>GC-safe</strong> — V8 handles Drop automatically.</p>
+<pre><code class="language-javascript">const { PulseMap } = require('pulse-map');
+
+const cache = new PulseMap(1024);
+cache.set('hello', 'world');
+console.log(cache.get('hello'));  // 'world'
+console.log(cache.size);         // 1
+</code></pre>
+<p><strong>Build:</strong> <code>npx napi build --release</code> → produces <code>.node</code> file.</p>
+<h2 id="memory-safety-by-language"><a class="header" href="#memory-safety-by-language">Memory Safety by Language</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Language</th><th>Who frees?</th><th style="text-align: center">Leak protection</th></tr>
+</thead>
+<tbody>
+<tr><td>C</td><td>User calls <code>pulse_map_free()</code></td><td style="text-align: center">❌ Manual</td></tr>
+<tr><td>Python</td><td>PyO3 Drop on GC</td><td style="text-align: center">✅ Automatic</td></tr>
+<tr><td>Java</td><td><code>close()</code> + <code>Cleaner</code> fallback</td><td style="text-align: center">✅ Double safety</td></tr>
+<tr><td>Node.js</td><td>napi-rs Drop on GC</td><td style="text-align: center">✅ Automatic</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="null-safety"><a class="header" href="#null-safety">Null Safety</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Language</th><th style="text-align: center">null key</th><th style="text-align: center">null value</th><th>Behavior</th></tr>
+</thead>
+<tbody>
+<tr><td>C</td><td style="text-align: center">✅ No-op</td><td style="text-align: center">✅ No-op</td><td>All functions check <code>ptr.is_null()</code></td></tr>
+<tr><td>Python</td><td style="text-align: center">✅ TypeError</td><td style="text-align: center">✅ TypeError</td><td>PyO3 rejects <code>None</code> as <code>&amp;str</code></td></tr>
+<tr><td>Java</td><td style="text-align: center">✅ NullPointerException</td><td style="text-align: center">✅ NullPointerException</td><td>Explicit checks</td></tr>
+<tr><td>Node.js</td><td style="text-align: center">✅ Error</td><td style="text-align: center">✅ Error</td><td>napi-rs rejects <code>null</code>/<code>undefined</code></td></tr>
+</tbody>
+</table>
+</div>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="use-cases"><a class="header" href="#use-cases">Use Cases</a></h1>
+<blockquote>
+<p><strong>💡 Use PulseMap anywhere you’d use HashMap but can’t afford unbounded memory growth.</strong></p>
+</blockquote>
+<h2 id="dns-cache"><a class="header" href="#dns-cache">DNS Cache</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let dns_cache = ConcurrentPulseMap::&lt;String, String&gt;::new(65536);
+
+// Hot domains stay, cold domains auto-evict
+dns_cache.insert("google.com".to_string(), "142.250.80.46".to_string());
+
+// Bounded memory — won't OOM on millions of unique queries
+<span class="boring">}</span></code></pre>
+<p><strong>Why PulseMap:</strong> ISPs see millions of unique domains. HashMap grows forever → OOM. PulseMap keeps the hottest records in fixed memory.</p>
+<h2 id="api-rate-limiter"><a class="header" href="#api-rate-limiter">API Rate Limiter</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let rate_limiter = ConcurrentPulseMap::&lt;String, u64&gt;::with_auto_resize(4096);
+
+fn check_rate(ip: &amp;str) -&gt; bool {
+    let key = ip.to_string();
+    let count = rate_limiter.get(&amp;key).unwrap_or(0);
+    if count &gt;= 100 {
+        return false;  // rate limited
+    }
+    rate_limiter.insert(key, count + 1);
+    true
+}
+<span class="boring">}</span></code></pre>
+<p><strong>Why PulseMap:</strong> Thousands of IPs hit your API. PulseMap tracks per-IP counters in bounded memory. Old IPs auto-evict.</p>
+<h2 id="cdn-edge-cache"><a class="header" href="#cdn-edge-cache">CDN Edge Cache</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let edge_cache = ConcurrentPulseMap::&lt;String, Vec&lt;u8&gt;&gt;::new(16384);
+
+// Serve from cache — ~5ns lookup
+if let Some(content) = edge_cache.get(&amp;url) {
+    return content;
+}
+
+// Cache miss — fetch from origin
+let content = fetch_origin(url);
+edge_cache.insert(url, content);
+<span class="boring">}</span></code></pre>
+<p><strong>Why PulseMap:</strong> Hot content stays in L1 (64-byte cache line). Cold content evicts automatically. No GC pauses.</p>
+<h2 id="game-asset-cache"><a class="header" href="#game-asset-cache">Game Asset Cache</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let texture_cache = ConcurrentPulseMap::&lt;String, u64&gt;::new(2048);
+
+// Cache texture IDs — fixed VRAM budget
+texture_cache.insert("hero_idle.png".to_string(), gpu_handle);
+
+// When VRAM is full, least-used textures evict
+println!("Evictions: {}", texture_cache.eviction_count());
+<span class="boring">}</span></code></pre>
+<p><strong>Why PulseMap:</strong> Fixed memory = no frame drops from GC. Eviction metadata is free (embedded in cache line).</p>
+<h2 id="session-store"><a class="header" href="#session-store">Session Store</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let sessions = ConcurrentPulseMap::&lt;String, String&gt;::with_auto_resize(8192);
+
+// Store session data
+sessions.insert(session_id, user_json);
+
+// Auto-evict idle sessions — no cleanup thread needed
+<span class="boring">}</span></code></pre>
+<p><strong>Why PulseMap:</strong> Sessions auto-evict when inactive. No background cleanup. No memory leak.</p>
+<h2 id="log-deduplication"><a class="header" href="#log-deduplication">Log Deduplication</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let seen_logs = ConcurrentPulseMap::&lt;u64, u8&gt;::new(32768);
+
+fn should_log(hash: u64) -&gt; bool {
+    if seen_logs.contains_key(&amp;hash) {
+        return false;  // duplicate — skip
+    }
+    seen_logs.insert(hash, 1);
+    true
+}
+<span class="boring">}</span></code></pre>
+<p><strong>Why PulseMap:</strong> Dedup window is bounded. Old hashes evict automatically.</p>
+<h2 id="database-query-cache"><a class="header" href="#database-query-cache">Database Query Cache</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let query_cache = ConcurrentPulseMap::&lt;String, String&gt;::new(4096);
+
+fn cached_query(sql: &amp;str) -&gt; String {
+    let key = sql.to_string();
+    if let Some(result) = query_cache.get(&amp;key) {
+        return result;  // cache hit — ~5ns
+    }
+    let result = execute_sql(sql);  // cache miss — ~1ms
+    query_cache.insert(key, result.clone());
+    result
+}
+<span class="boring">}</span></code></pre>
+<p><strong>Why PulseMap:</strong> Hot queries stay cached. Cold queries evict. Fixed memory = predictable DB performance.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="faq"><a class="header" href="#faq">FAQ</a></h1>
+<h2 id="general"><a class="header" href="#general">General</a></h2>
+<h3 id="is-pulsemap-a-hashmap-replacement"><a class="header" href="#is-pulsemap-a-hashmap-replacement">Is PulseMap a HashMap replacement?</a></h3>
+<p><strong>No.</strong> PulseMap is a <strong>bounded cache</strong> with automatic eviction. Use it when:</p>
+<ul>
+<li>You need fixed memory usage</li>
+<li>You can tolerate entries being evicted</li>
+<li>You want in-process caching without Redis</li>
+</ul>
+<p>Use <code>HashMap</code> when you need to keep every entry forever.</p>
+<h3 id="what-happens-when-pulsemap-is-full"><a class="header" href="#what-happens-when-pulsemap-is-full">What happens when PulseMap is full?</a></h3>
+<p>The <strong>least-useful entry</strong> in the target bucket is evicted (LFU+LRU hybrid). This is automatic and costs zero additional cache misses. Check <code>eviction_count()</code> to monitor.</p>
+<h3 id="can-i-turn-off-eviction"><a class="header" href="#can-i-turn-off-eviction">Can I turn off eviction?</a></h3>
+<p>Not directly, but you can minimize it:</p>
+<ol>
+<li>Use <code>with_auto_resize(n)</code> — the map doubles when 75% full</li>
+<li>Start with a large initial size</li>
+<li>Monitor <code>eviction_count()</code> — if it’s 0, you’re fine</li>
+</ol>
+<h3 id="whats-the-maximum-keyvalue-size"><a class="header" href="#whats-the-maximum-keyvalue-size">What’s the maximum key/value size?</a></h3>
+<ul>
+<li><strong>Inline mode:</strong> key ≤ 6 bytes, value ≤ 7 bytes (fastest, zero allocation)</li>
+<li><strong>Slab mode:</strong> unlimited size (heap allocated)</li>
+</ul>
+<p>Both modes are transparent — PulseMap automatically chooses the optimal storage.</p>
+<hr>
+<h2 id="performance"><a class="header" href="#performance">Performance</a></h2>
+<h3 id="why-is-pulsemap-faster-than-hashmap"><a class="header" href="#why-is-pulsemap-faster-than-hashmap">Why is PulseMap faster than HashMap?</a></h3>
+<p>Three reasons:</p>
+<ol>
+<li><strong>Cache efficiency:</strong> 1 cache line per lookup (vs 2-3 for HashMap)</li>
+<li><strong>No pointer chasing:</strong> Inline mode stores data directly in the bucket</li>
+<li><strong>H2 fingerprint:</strong> 99.2% of non-matches rejected without key comparison</li>
+</ol>
+<h3 id="when-is-pulsemap-slower"><a class="header" href="#when-is-pulsemap-slower">When is PulseMap slower?</a></h3>
+<ul>
+<li><strong>Iteration</strong> — PulseMap doesn’t maintain insertion order</li>
+<li><strong>Very large values</strong> — Slab allocation adds overhead</li>
+<li><strong>99%+ fill rate</strong> — Every insert causes an eviction</li>
+</ul>
+<h3 id="how-does-it-compare-to-dashmap"><a class="header" href="#how-does-it-compare-to-dashmap">How does it compare to DashMap?</a></h3>
+<p>PulseMap is ~1.3-1.5× faster for concurrent workloads because:</p>
+<ul>
+<li>Per-bucket spinlocks (1 byte) vs DashMap’s shard-level locks</li>
+<li>Cache-line-aligned buckets vs cache-unfriendly nodes</li>
+</ul>
+<hr>
+<h2 id="memory"><a class="header" href="#memory">Memory</a></h2>
+<h3 id="does-pulsemap-leak-memory"><a class="header" href="#does-pulsemap-leak-memory">Does PulseMap leak memory?</a></h3>
+<p><strong>No</strong> (since v0.5.0). All bindings are audited:</p>
+<ul>
+<li><strong>Rust:</strong> Automatic <code>Drop</code> chains through SlabPool</li>
+<li><strong>Python:</strong> PyO3 auto-drop on GC</li>
+<li><strong>Java:</strong> <code>Cleaner</code> safety net + <code>AutoCloseable</code></li>
+<li><strong>Node.js:</strong> napi-rs auto-drop on GC</li>
+<li><strong>C:</strong> User must call <code>pulse_map_free()</code> (documented)</li>
+</ul>
+<h3 id="how-much-memory-does-pulsemap-use"><a class="header" href="#how-much-memory-does-pulsemap-use">How much memory does PulseMap use?</a></h3>
+<pre><code>Memory = num_buckets × 64 bytes + slab_overhead
+</code></pre>
+<p>For inline-only workloads (small KV pairs): exactly <code>num_buckets × 64</code> bytes.</p>
+<h3 id="can-i-use-pulsemap-in-no_std"><a class="header" href="#can-i-use-pulsemap-in-no_std">Can I use PulseMap in no_std?</a></h3>
+<p>Yes! Disable the <code>std</code> feature:</p>
+<pre><code class="language-toml">pulse_map = { version = "0.5", default-features = false }
+</code></pre>
+<p>Core data structures (<code>MetaWord</code>, <code>Slot</code>, <code>Bucket</code>) work without allocator.</p>
+<hr>
+<h2 id="concurrency"><a class="header" href="#concurrency">Concurrency</a></h2>
+<h3 id="is-pulsemap-thread-safe"><a class="header" href="#is-pulsemap-thread-safe">Is PulseMap thread-safe?</a></h3>
+<p><code>ConcurrentPulseMap</code> is fully thread-safe. <code>TypedPulseMap</code> and <code>PulseMapRaw</code> are single-threaded.</p>
+<h3 id="can-i-use-pulsemap-with-asyncawait"><a class="header" href="#can-i-use-pulsemap-with-asyncawait">Can I use PulseMap with async/await?</a></h3>
+<p>Yes! <code>ConcurrentPulseMap</code> methods are non-blocking (spinlock, not mutex):</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>async fn handler(cache: &amp;ConcurrentPulseMap&lt;String, String&gt;) {
+    // Safe to call from async context — won't block the executor
+    cache.insert("key".to_string(), "val".to_string());
+}
+<span class="boring">}</span></code></pre>
+<h3 id="what-happens-during-resize"><a class="header" href="#what-happens-during-resize">What happens during resize?</a></h3>
+<p>Resize acquires an exclusive write lock (stop-the-world). All reads and writes block until rehashing completes. Duration: ~1ms per 10K entries.</p>
+<hr>
+<h2 id="ffi"><a class="header" href="#ffi">FFI</a></h2>
+<h3 id="which-java-version-do-i-need"><a class="header" href="#which-java-version-do-i-need">Which Java version do I need?</a></h3>
+<p>Java <strong>22 or later</strong>. PulseMap Java bindings use the Panama FFM API (Foreign Function &amp; Memory), which became stable in Java 22.</p>
+<h3 id="do-i-need-to-install-rust-to-use-the-pythonnodejs-bindings"><a class="header" href="#do-i-need-to-install-rust-to-use-the-pythonnodejs-bindings">Do I need to install Rust to use the Python/Node.js bindings?</a></h3>
+<p>For <strong>pre-built wheels</strong> (pip install / npm install): No.
+For <strong>building from source</strong>: Yes, you need Rust + Cargo.</p>
+<h3 id="is-the-c-api-thread-safe"><a class="header" href="#is-the-c-api-thread-safe">Is the C API thread-safe?</a></h3>
+<p>Yes! The C API wraps <code>ConcurrentPulseMap</code> internally. You can call <code>pulse_map_insert()</code> from multiple threads simultaneously.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="changelog"><a class="header" href="#changelog">Changelog</a></h1>
+<p>See the full <a href="https://github.com/ddsha441981/pulse_map/blob/main/CHANGELOG.md">CHANGELOG.md</a> in the repository root.</p>
+<h2 id="v050-2026-05-26"><a class="header" href="#v050-2026-05-26">v0.5.0 (2026-05-26)</a></h2>
+<h3 id="added"><a class="header" href="#added">Added</a></h3>
+<ul>
+<li><strong>Multi-language FFI bindings</strong> — C, Python (PyO3), Java (Panama FFM), Node.js (napi-rs)</li>
+<li><code>ConcurrentPulseMap</code> — thread-safe wrapper with per-bucket spinlocks</li>
+<li>Auto-resize support (<code>with_auto_resize()</code>)</li>
+<li><code>peek()</code> method — lookup without eviction priority update</li>
+<li>Unicode support across all bindings</li>
+<li><code>Cleaner</code>-based GC safety net for Java bindings</li>
+<li>Null-safety checks across all bindings (63 total tests)</li>
+</ul>
+<h3 id="changed"><a class="header" href="#changed">Changed</a></h3>
+<ul>
+<li>Workspace split: <code>pulse_map</code> (core) + <code>pulse_map_bindings</code> (FFI)</li>
+<li>Documentation URL: <code>https://docs.rs/pulse_map</code></li>
+<li>MSRV declared: <code>rust-version = "1.70.0"</code></li>
+</ul>
+<h2 id="v040-2026-05-26"><a class="header" href="#v040-2026-05-26">v0.4.0 (2026-05-26)</a></h2>
+<h3 id="added-1"><a class="header" href="#added-1">Added</a></h3>
+<ul>
+<li>Benchmark suite via Criterion</li>
+<li>SIMD H2 matching (optional, x86_64)</li>
+<li><code>TypedPulseMap&lt;K, V&gt;</code> with <code>PulseKey</code>/<code>PulseValue</code> traits</li>
+<li>Iteration support (<code>RawIter</code>, <code>TypedIter</code>)</li>
+</ul>
+<h2 id="v030-2026-05-26"><a class="header" href="#v030-2026-05-26">v0.3.0 (2026-05-26)</a></h2>
+<h3 id="added-2"><a class="header" href="#added-2">Added</a></h3>
+<ul>
+<li>Dynamic resize support</li>
+<li><code>no_std</code> compatibility</li>
+<li>Entry API improvements</li>
+</ul>
+<h2 id="v020-2026-05-22"><a class="header" href="#v020-2026-05-22">v0.2.0 (2026-05-22)</a></h2>
+<h3 id="added-3"><a class="header" href="#added-3">Added</a></h3>
+<ul>
+<li>LFU+LRU hybrid eviction (MetaWord)</li>
+<li>WyHash integration</li>
+<li>H2 fingerprint matching</li>
+</ul>
+<h2 id="v010-2026-05-22"><a class="header" href="#v010-2026-05-22">v0.1.0 (2026-05-22)</a></h2>
+<h3 id="added-4"><a class="header" href="#added-4">Added</a></h3>
+<ul>
+<li>Initial release</li>
+<li>64-byte cache-line bucket architecture</li>
+<li>Inline + slab dual-mode storage</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="contributing"><a class="header" href="#contributing">Contributing</a></h1>
+<p>See the full <a href="https://github.com/ddsha441981/pulse_map/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a> in the repository root.</p>
+<h2 id="quick-start"><a class="header" href="#quick-start">Quick Start</a></h2>
+<pre><code class="language-bash">git clone https://github.com/ddsha441981/pulse_map.git
+cd pulse_map
+cargo build
+cargo test
+</code></pre>
+<h2 id="before-submitting"><a class="header" href="#before-submitting">Before Submitting</a></h2>
+<pre><code class="language-bash">cargo fmt               # Format
+cargo clippy -- -D warnings  # Lint (zero warnings)
+cargo test              # All tests pass
+cargo doc --no-deps     # No doc warnings
+</code></pre>
+<h2 id="architecture-1"><a class="header" href="#architecture-1">Architecture</a></h2>
+<pre><code>Layer 4: sync.rs    → ConcurrentPulseMap
+Layer 3: lib.rs     → User API (TypedPulseMap, PulseMap)
+Layer 2: raw.rs     → Hash table logic
+Layer 1: core/      → MetaWord, Slot, Bucket, hash, slab
+</code></pre>
+<h2 id="key-rules"><a class="header" href="#key-rules">Key Rules</a></h2>
+<ol>
+<li>Every bucket = exactly 64 bytes</li>
+<li>Eviction is zero-cost (metadata in cache line)</li>
+<li>No heap allocation in hot path</li>
+<li>Thread safety via <code>&amp;self</code> (no <code>&amp;mut self</code> for CRUD)</li>
+</ol>
+<h2 id="license-1"><a class="header" href="#license-1">License</a></h2>
+<p>By contributing, you agree your contributions are licensed under <strong>MIT OR Apache-2.0</strong>.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+        <!-- Livereload script (if served using the cli tool) -->
+        <script>
+            const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsAddress = wsProtocol + "//" + location.host + "/" + "__livereload";
+            const socket = new WebSocket(wsAddress);
+            socket.onmessage = function (event) {
+                if (event.data === "reload") {
+                    socket.close();
+                    location.reload();
+                }
+            };
+
+            window.onbeforeunload = function() {
+                socket.close();
+            }
+        </script>
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr-ef4e11c1.min.js"></script>
+        <script src="mark-09e88c2c.min.js"></script>
+        <script src="searcher-c2a407aa.js"></script>
+
+        <script src="clipboard-1626706a.min.js"></script>
+        <script src="highlight-abc7f01d.js"></script>
+        <script src="book-a0b12cfe.js"></script>
+
+        <!-- Custom JS scripts -->
+
+        <script>
+        window.addEventListener('load', function() {
+            window.setTimeout(window.print, 100);
+        });
+        </script>
+
+
+    </div>
+    </body>
+</html>

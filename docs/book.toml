@@ -1,0 +1,31 @@
+[book]
+title = "PulseMap — The Complete Guide"
+authors = ["Deendayal Kumawat"]
+description = "A CPU cache-line hash table with zero-cost eviction"
+language = "en"
+src = "src"
+
+[output.html]
+# ─── Theme Options ───────────────────────────────────────
+# Available themes:
+#   "light"  — Clean white background, black text (classic)
+#   "rust"   — Warm beige/brown tones (official Rust docs style)
+#   "coal"   — Dark charcoal/black background, light text
+#   "navy"   — Deep navy blue background, white text (modern dark)
+#   "ayu"    — Ayu dark theme, soft dark with golden accents
+#
+# default-theme     = theme shown on first visit
+# preferred-dark-theme = theme used when OS dark mode is active
+# ──────────────────────────────────────────────────────────
+default-theme = "navy"
+preferred-dark-theme = "rust"
+
+git-repository-url = "https://github.com/ddsha441981/pulse_map"
+edit-url-template = "https://github.com/ddsha441981/pulse_map/edit/main/docs/{path}"
+
+# ─── Build Commands ──────────────────────────────────────
+# Install:  cargo install mdbook
+# Build:    cd docs && mdbook build
+# Serve:    cd docs && mdbook serve  (live reload at localhost:3000)
+# Clean:    cd docs && mdbook clean
+# ──────────────────────────────────────────────────────────

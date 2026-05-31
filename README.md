@@ -7,6 +7,14 @@
 
 > Every bucket fits in exactly **one 64-byte CPU cache line** with embedded LFU+LRU eviction metadata. Eviction decisions cost **zero additional cache misses**.
 
+> **💡 Use PulseMap anywhere you'd use HashMap but can't afford unbounded memory growth.**
+>
+> HashMap grows forever → OOM in production. Redis adds ~100μs network hop.
+> PulseMap gives you **bounded memory, ~5ns lookups, automatic eviction, and zero GC pauses** — all in-process.
+>
+> **DNS caches • API rate limiters • CDN edge caches • game asset pools • session stores**
+
+
 ## What Is PulseMap?
 
 PulseMap is a **hash table with built-in eviction** — not a HashMap replacement.
@@ -160,29 +168,41 @@ Layer 2: raw.rs          → Hash table logic (insert/get/remove/evict)
 Layer 1: core/           → Building blocks (MetaWord, Slot, Bucket, hash)
 ```
 
-## Project Structure
+## Project Structure (Workspace)
 
 ```
-pulse_map/
-├── Cargo.toml
-├── README.md
-├── CHANGELOG.md
-├── src/
-│   ├── lib.rs              # Public API (PulseMap, TypedPulseMap<K,V>, Entry API)
-│   ├── raw.rs              # PulseMapRaw — raw byte engine (power-of-2 + prefetch)
-│   ├── sync.rs             # ConcurrentPulseMap (per-bucket spinlock + RwLock resize)
-│   ├── iter.rs             # RawIter + TypedIter
-│   ├── traits.rs           # Debug, Display, Extend, From<HashMap>
-│   ├── simd.rs             # SIMD H2 matching (--features simd, x86_64)
-│   └── core/               # Core engine (64-byte internals)
-│       ├── mod.rs           # Module re-exports
-│       ├── meta.rs          # MetaWord (branchless match_mask + SIMD dispatch)
-│       ├── slot.rs          # Slot (14-byte inline/slab)
-│       ├── bucket.rs        # Bucket (64B cache-line aligned)
-│       ├── slab.rs          # SlabPool (arena allocator)
-│       └── hash.rs          # wyhash → H1/H2/ext_fp
-└── benches/
-    └── benchmark.rs         # Criterion benchmarks (vs lru + std + concurrent)
+new_hash_table/
+├── Cargo.toml                        # Workspace root
+│
+├── pulse_map/                        # Core Rust crate
+│   ├── src/
+│   │   ├── lib.rs                    # Public API (TypedPulseMap, PulseMap, Entry)
+│   │   ├── raw.rs                    # PulseMapRaw (power-of-2 + prefetch)
+│   │   ├── sync.rs                   # ConcurrentPulseMap (spinlock + RwLock)
+│   │   ├── iter.rs                   # RawIter + TypedIter
+│   │   ├── traits.rs                 # Debug, Display, Extend, From<HashMap>
+│   │   ├── simd.rs                   # SIMD H2 matching (x86_64)
+│   │   └── core/                     # 64-byte internals
+│   └── benches/benchmark.rs          # Criterion benchmarks
+│
+├── pulse_map_ffi/                    # C FFI bindings
+│   ├── src/lib.rs                    # 12 extern "C" functions
+│   ├── include/pulse_map.h           # C header (opaque handle)
+│   └── tests/test_pulse_map.c        # 11 C tests
+│
+├── pulse_map_py/                     # Python bindings (PyO3)
+│   ├── src/lib.rs                    # Dict-like API
+│   ├── pyproject.toml                # maturin config
+│   └── tests/test_pulse_map.py       # 11 Python tests
+│
+├── pulse_map_java/                   # Java bindings (Panama FFM)
+│   ├── src/lib.rs                    # Rust cdylib
+│   └── src/main/java/com/pulsemap/  # PulseMap.java + PulseMapNative.java
+│
+└── pulse_map_node/                   # Node.js bindings (napi-rs)
+    ├── src/lib.rs                    # napi addon
+    ├── package.json
+    └── tests/test_pulse_map.js       # 10 Node.js tests
 ```
 
 ## API Reference
@@ -248,6 +268,40 @@ pulse_map = { version = "0.4", default-features = false }
 ### Design Notes
 
 - **`map[&key]` (Index trait) is intentionally NOT supported.** PulseMap stores bytes and deserializes on read — it returns `V` (owned copy), not `&V` (reference). Use `.get(&key)` instead.
+
+## Multi-Language Bindings (v0.5.0)
+
+### C
+```c
+#include "pulse_map.h"
+PulseMapHandle* map = pulse_map_new(1024);
+pulse_map_insert(map, "hello", 5, "world", 5);
+pulse_map_free(map);
+```
+
+### Python
+```python
+from pulse_map_py import PulseMap
+cache = PulseMap(1024)
+cache["hello"] = "world"
+print(cache["hello"])  # "world"
+```
+
+### Java (22+ Panama)
+```java
+try (var cache = new PulseMap(1024)) {
+    cache.put("hello", "world");
+    System.out.println(cache.get("hello"));  // "world"
+}
+```
+
+### Node.js
+```javascript
+const { PulseMap } = require('pulse-map');
+const cache = new PulseMap(1024);
+cache.set('hello', 'world');
+console.log(cache.get('hello'));  // 'world'
+```
 
 ## Use Cases
 

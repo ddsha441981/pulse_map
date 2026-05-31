@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Deendayal Kumawat. All rights reserved.
+// Licensed under the MIT OR Apache-2.0 license.
+
 //! MetaWord — 64-bit packed metadata for 4 slots.
 //!
 //! Layout (64 bits):

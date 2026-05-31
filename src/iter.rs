@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Deendayal Kumawat. All rights reserved.
+// Licensed under the MIT OR Apache-2.0 license.
+
 //! Iterators for PulseMap.
 //!
 //! - `RawIter` — iterates over `(&[u8], &[u8])` raw key-value pairs
