@@ -10,6 +10,10 @@ use crate::core::bucket::Bucket;
 use crate::core::hash::compute_hash;
 use crate::core::slab::SlabPool;
 use crate::SlotState;
+#[cfg(not(feature = "std"))]
+use alloc::vec;
+#[cfg(not(feature = "std"))]
+use alloc::vec::Vec;
 
 /// Raw byte-level cache-line hash table with zero-cost eviction.
 ///
@@ -114,7 +118,7 @@ impl PulseMapRaw {
         #[cfg(target_arch = "x86_64")]
         unsafe {
             let ptr = self.buckets.as_ptr().add(bucket_idx) as *const i8;
-            std::arch::x86_64::_mm_prefetch(ptr, std::arch::x86_64::_MM_HINT_T0);
+            ::core::arch::x86_64::_mm_prefetch(ptr, ::core::arch::x86_64::_MM_HINT_T0);
         }
 
         let bucket = &self.buckets[bucket_idx];

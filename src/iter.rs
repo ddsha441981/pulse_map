@@ -72,14 +72,14 @@ impl<'a> Iterator for RawIter<'a> {
 /// Iterator over typed `(K, V)` pairs in a TypedPulseMap.
 pub struct TypedIter<'a, K: PulseKey, V: PulseValue> {
     raw_iter: RawIter<'a>,
-    _marker: std::marker::PhantomData<(K, V)>,
+    _marker: ::core::marker::PhantomData<(K, V)>,
 }
 
 impl<'a, K: PulseKey, V: PulseValue> TypedIter<'a, K, V> {
     pub fn new(map: &'a PulseMapRaw) -> Self {
         Self {
             raw_iter: RawIter::new(map),
-            _marker: std::marker::PhantomData,
+            _marker: ::core::marker::PhantomData,
         }
     }
 }

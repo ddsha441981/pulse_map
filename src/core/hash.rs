@@ -3,7 +3,7 @@
 
 //! Hash computation — wyhash split into H1, H2, ext_fp_hi, ext_fp.
 
-use std::hash::Hasher;
+use ::core::hash::Hasher;
 
 /// Result of hashing a key, split into components.
 pub struct HashResult {

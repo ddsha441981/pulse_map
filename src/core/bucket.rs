@@ -34,4 +34,4 @@ impl Bucket {
 }
 
 // Compile-time assertion: Bucket must be exactly 64 bytes
-const _: () = assert!(std::mem::size_of::<Bucket>() == 64);
+const _: () = assert!(::core::mem::size_of::<Bucket>() == 64);

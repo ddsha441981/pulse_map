@@ -35,6 +35,11 @@
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 
+#[cfg(not(feature = "std"))]
+use alloc::{string::String, vec::Vec};
+#[cfg(feature = "std")]
+use std::{string::String, vec::Vec};
+
 mod core;
 mod iter;
 mod raw;
@@ -193,7 +198,7 @@ impl PulseKey for String {
         self.as_bytes().to_vec()
     }
     fn from_bytes(b: &[u8]) -> Option<Self> {
-        std::str::from_utf8(b).ok().map(String::from)
+        ::core::str::from_utf8(b).ok().map(String::from)
     }
 }
 
@@ -285,7 +290,7 @@ impl PulseValue for String {
         self.as_bytes().to_vec()
     }
     fn from_bytes(b: &[u8]) -> Option<Self> {
-        std::str::from_utf8(b).ok().map(String::from)
+        ::core::str::from_utf8(b).ok().map(String::from)
     }
 }
 
@@ -329,7 +334,7 @@ impl PulseValue for bool {
 /// ```
 pub struct TypedPulseMap<K: PulseKey, V: PulseValue> {
     raw: PulseMapRaw,
-    _marker: std::marker::PhantomData<(K, V)>,
+    _marker: ::core::marker::PhantomData<(K, V)>,
 }
 
 impl<K: PulseKey, V: PulseValue> TypedPulseMap<K, V> {
@@ -337,7 +342,7 @@ impl<K: PulseKey, V: PulseValue> TypedPulseMap<K, V> {
     pub fn new(num_buckets: usize) -> Self {
         Self {
             raw: PulseMapRaw::new(num_buckets),
-            _marker: std::marker::PhantomData,
+            _marker: ::core::marker::PhantomData,
         }
     }
 

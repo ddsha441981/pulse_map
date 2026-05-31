@@ -9,13 +9,15 @@
 //! - `From<HashMap<K, V>>` — convert std::HashMap to TypedPulseMap
 
 use crate::{PulseKey, PulseValue, TypedPulseMap};
+#[cfg(not(feature = "std"))]
+use alloc::format;
 
 // ── Debug trait ──
 
-impl<K: PulseKey + std::fmt::Debug, V: PulseValue + std::fmt::Debug> std::fmt::Debug
-    for TypedPulseMap<K, V>
+impl<K: PulseKey + ::core::fmt::Debug, V: PulseValue + ::core::fmt::Debug> ::core::fmt::Debug
+for TypedPulseMap<K, V>
 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
         f.debug_struct("TypedPulseMap")
             .field("len", &self.len())
             .field("capacity", &self.capacity())
@@ -30,8 +32,8 @@ impl<K: PulseKey + std::fmt::Debug, V: PulseValue + std::fmt::Debug> std::fmt::D
 
 // ── Display trait ──
 
-impl<K: PulseKey, V: PulseValue> std::fmt::Display for TypedPulseMap<K, V> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl<K: PulseKey, V: PulseValue> ::core::fmt::Display for TypedPulseMap<K, V> {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
         write!(
             f,
             "PulseMap({}/{} entries, {:.1}% load, {} evictions)",
@@ -57,7 +59,7 @@ impl<K: PulseKey, V: PulseValue> Extend<(K, V)> for TypedPulseMap<K, V> {
 
 #[cfg(feature = "std")]
 impl<K: PulseKey + std::hash::Hash + Eq, V: PulseValue> From<std::collections::HashMap<K, V>>
-    for TypedPulseMap<K, V>
+for TypedPulseMap<K, V>
 {
     /// Convert a std::HashMap into a TypedPulseMap.
     ///
