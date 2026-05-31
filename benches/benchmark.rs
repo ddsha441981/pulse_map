@@ -1,10 +1,10 @@
 // Copyright (c) 2026 Deendayal Kumawat. All rights reserved.
 // Licensed under the MIT OR Apache-2.0 license.
 
-use criterion::{criterion_group, criterion_main, Criterion, black_box};
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use lru::LruCache;
 use pulse_map::{PulseMap, TypedPulseMap};
 use std::collections::HashMap;
-use lru::LruCache;
 use std::num::NonZeroUsize;
 
 // ═══════════════════════════════════════
@@ -32,7 +32,9 @@ fn pulse_raw_lookup_100k(c: &mut Criterion) {
         b.iter(|| {
             let mut hits = 0u64;
             for i in 0u32..100_000 {
-                if map.get(&i.to_le_bytes()).is_some() { hits += 1; }
+                if map.get(&i.to_le_bytes()).is_some() {
+                    hits += 1;
+                }
             }
             black_box(hits)
         });
@@ -90,7 +92,9 @@ fn pulse_typed_lookup_100k(c: &mut Criterion) {
         b.iter(|| {
             let mut hits = 0u64;
             for i in 0u32..100_000 {
-                if map.get(&i).is_some() { hits += 1; }
+                if map.get(&i).is_some() {
+                    hits += 1;
+                }
             }
             black_box(hits)
         });
@@ -103,7 +107,9 @@ fn pulse_typed_mixed_100k(c: &mut Criterion) {
             let mut map = TypedPulseMap::<u32, u32>::new(38461);
             for i in 0u32..100_000 {
                 map.insert(i, i * 2);
-                if i > 0 { black_box(map.get(&(i / 2))); }
+                if i > 0 {
+                    black_box(map.get(&(i / 2)));
+                }
             }
         });
     });
@@ -149,7 +155,9 @@ fn lru_lookup_100k(c: &mut Criterion) {
         b.iter(|| {
             let mut hits = 0u64;
             for i in 0u32..100_000 {
-                if cache.get(&i).is_some() { hits += 1; }
+                if cache.get(&i).is_some() {
+                    hits += 1;
+                }
             }
             black_box(hits)
         });
@@ -163,7 +171,9 @@ fn lru_mixed_100k(c: &mut Criterion) {
             let mut cache = LruCache::<u32, u32>::new(cap);
             for i in 0u32..100_000 {
                 cache.put(i, i * 2);
-                if i > 0 { black_box(cache.get(&(i / 2))); }
+                if i > 0 {
+                    black_box(cache.get(&(i / 2)));
+                }
             }
         });
     });
@@ -207,7 +217,9 @@ fn std_lookup_100k(c: &mut Criterion) {
         b.iter(|| {
             let mut hits = 0u64;
             for i in 0u32..100_000 {
-                if map.get(&i).is_some() { hits += 1; }
+                if map.get(&i).is_some() {
+                    hits += 1;
+                }
             }
             black_box(hits)
         });
@@ -220,7 +232,9 @@ fn std_mixed_100k(c: &mut Criterion) {
             let mut map: HashMap<u32, u32> = HashMap::with_capacity(100_000);
             for i in 0u32..100_000 {
                 map.insert(i, i * 2);
-                if i > 0 { black_box(map.get(&(i / 2))); }
+                if i > 0 {
+                    black_box(map.get(&(i / 2)));
+                }
             }
         });
     });
@@ -263,15 +277,19 @@ fn concurrent_insert_4t_100k(c: &mut Criterion) {
     c.bench_function("conc_4t_insert_100k", |b| {
         b.iter(|| {
             let map = Arc::new(ConcurrentPulseMap::<u32, u32>::new(38461));
-            let handles: Vec<_> = (0..4u32).map(|t| {
-                let m = map.clone();
-                thread::spawn(move || {
-                    for i in 0..25_000u32 {
-                        m.insert(t * 100_000 + i, i);
-                    }
+            let handles: Vec<_> = (0..4u32)
+                .map(|t| {
+                    let m = map.clone();
+                    thread::spawn(move || {
+                        for i in 0..25_000u32 {
+                            m.insert(t * 100_000 + i, i);
+                        }
+                    })
                 })
-            }).collect();
-            for h in handles { h.join().unwrap(); }
+                .collect();
+            for h in handles {
+                h.join().unwrap();
+            }
             black_box(map.len());
         });
     });
@@ -284,16 +302,20 @@ fn concurrent_lookup_4t_100k(c: &mut Criterion) {
     }
     c.bench_function("conc_4t_lookup_100k", |b| {
         b.iter(|| {
-            let handles: Vec<_> = (0..4u32).map(|t| {
-                let m = map.clone();
-                thread::spawn(move || {
-                    let mut hits = 0u64;
-                    for i in 0..25_000u32 {
-                        if m.get(&(t * 25_000 + i)).is_some() { hits += 1; }
-                    }
-                    hits
+            let handles: Vec<_> = (0..4u32)
+                .map(|t| {
+                    let m = map.clone();
+                    thread::spawn(move || {
+                        let mut hits = 0u64;
+                        for i in 0..25_000u32 {
+                            if m.get(&(t * 25_000 + i)).is_some() {
+                                hits += 1;
+                            }
+                        }
+                        hits
+                    })
                 })
-            }).collect();
+                .collect();
             let total: u64 = handles.into_iter().map(|h| h.join().unwrap()).sum();
             black_box(total);
         });
@@ -304,17 +326,23 @@ fn concurrent_mixed_4t_100k(c: &mut Criterion) {
     c.bench_function("conc_4t_mixed_100k", |b| {
         b.iter(|| {
             let map = Arc::new(ConcurrentPulseMap::<u32, u32>::new(38461));
-            let handles: Vec<_> = (0..4u32).map(|t| {
-                let m = map.clone();
-                thread::spawn(move || {
-                    for i in 0..25_000u32 {
-                        let key = t * 100_000 + i;
-                        m.insert(key, i);
-                        if i > 0 { black_box(m.get(&(key - 1))); }
-                    }
+            let handles: Vec<_> = (0..4u32)
+                .map(|t| {
+                    let m = map.clone();
+                    thread::spawn(move || {
+                        for i in 0..25_000u32 {
+                            let key = t * 100_000 + i;
+                            m.insert(key, i);
+                            if i > 0 {
+                                black_box(m.get(&(key - 1)));
+                            }
+                        }
+                    })
                 })
-            }).collect();
-            for h in handles { h.join().unwrap(); }
+                .collect();
+            for h in handles {
+                h.join().unwrap();
+            }
             black_box(map.len());
         });
     });
@@ -349,4 +377,3 @@ criterion_group!(
     concurrent_mixed_4t_100k,
 );
 criterion_main!(benches);
-

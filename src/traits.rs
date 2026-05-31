@@ -12,12 +12,17 @@ use crate::{PulseKey, PulseValue, TypedPulseMap};
 
 // ── Debug trait ──
 
-impl<K: PulseKey + std::fmt::Debug, V: PulseValue + std::fmt::Debug> std::fmt::Debug for TypedPulseMap<K, V> {
+impl<K: PulseKey + std::fmt::Debug, V: PulseValue + std::fmt::Debug> std::fmt::Debug
+    for TypedPulseMap<K, V>
+{
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("TypedPulseMap")
             .field("len", &self.len())
             .field("capacity", &self.capacity())
-            .field("load_factor", &format!("{:.1}%", self.load_factor() * 100.0))
+            .field(
+                "load_factor",
+                &format!("{:.1}%", self.load_factor() * 100.0),
+            )
             .field("evictions", &self.eviction_count())
             .finish()
     }
@@ -51,7 +56,9 @@ impl<K: PulseKey, V: PulseValue> Extend<(K, V)> for TypedPulseMap<K, V> {
 // ── From<HashMap> trait (requires std) ──
 
 #[cfg(feature = "std")]
-impl<K: PulseKey + std::hash::Hash + Eq, V: PulseValue> From<std::collections::HashMap<K, V>> for TypedPulseMap<K, V> {
+impl<K: PulseKey + std::hash::Hash + Eq, V: PulseValue> From<std::collections::HashMap<K, V>>
+    for TypedPulseMap<K, V>
+{
     /// Convert a std::HashMap into a TypedPulseMap.
     ///
     /// The number of buckets is auto-calculated for ~65% load factor.

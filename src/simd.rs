@@ -29,8 +29,7 @@ pub unsafe fn match_mask_simd(meta_raw: u64, h2: u8) -> u8 {
 
     // SIMD compare: pack 4 H2s into XMM, compare all at once
     let h2s = _mm_set_epi8(
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        h3 as i8, h2_2 as i8, h1 as i8, h0 as i8,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, h3 as i8, h2_2 as i8, h1 as i8, h0 as i8,
     );
     let target = _mm_set1_epi8(h2 as i8);
     let cmp = _mm_cmpeq_epi8(h2s, target);

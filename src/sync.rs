@@ -505,7 +505,10 @@ impl<K: PulseKey, V: PulseValue> std::fmt::Debug for ConcurrentPulseMap<K, V> {
         f.debug_struct("ConcurrentPulseMap")
             .field("len", &self.len())
             .field("capacity", &self.capacity())
-            .field("load_factor", &format!("{:.1}%", self.load_factor() * 100.0))
+            .field(
+                "load_factor",
+                &format!("{:.1}%", self.load_factor() * 100.0),
+            )
             .field("evictions", &self.eviction_count())
             .finish()
     }

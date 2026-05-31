@@ -182,20 +182,32 @@ impl PulseMapRaw {
     }
 
     #[inline]
-    pub fn len(&self) -> usize { self.count }
+    pub fn len(&self) -> usize {
+        self.count
+    }
 
     #[inline]
-    pub fn is_empty(&self) -> bool { self.count == 0 }
+    pub fn is_empty(&self) -> bool {
+        self.count == 0
+    }
 
     #[inline]
-    pub fn capacity(&self) -> usize { self.num_buckets * 4 }
+    pub fn capacity(&self) -> usize {
+        self.num_buckets * 4
+    }
 
     #[inline]
-    pub fn num_buckets(&self) -> usize { self.num_buckets }
+    pub fn num_buckets(&self) -> usize {
+        self.num_buckets
+    }
 
     #[inline]
-    pub fn load_factor(&self) -> f64 { self.count as f64 / self.capacity() as f64 }
+    pub fn load_factor(&self) -> f64 {
+        self.count as f64 / self.capacity() as f64
+    }
 
     #[inline]
-    pub fn eviction_count(&self) -> usize { self.eviction_count }
+    pub fn eviction_count(&self) -> usize {
+        self.eviction_count
+    }
 }

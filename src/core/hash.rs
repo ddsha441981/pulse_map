@@ -7,10 +7,10 @@ use std::hash::Hasher;
 
 /// Result of hashing a key, split into components.
 pub struct HashResult {
-    pub h1: u64,        // Bucket index
-    pub h2: u8,         // 7-bit fingerprint (for MetaWord)
-    pub ext_fp_hi: u8,  // 7-bit extended fingerprint high (for slab slot header)
-    pub ext_fp: u32,    // 32-bit extended fingerprint (for slab slot)
+    pub h1: u64,       // Bucket index
+    pub h2: u8,        // 7-bit fingerprint (for MetaWord)
+    pub ext_fp_hi: u8, // 7-bit extended fingerprint high (for slab slot header)
+    pub ext_fp: u32,   // 32-bit extended fingerprint (for slab slot)
 }
 
 /// Compute hash of a key and split into H1, H2, ext_fp_hi, ext_fp.

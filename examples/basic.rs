@@ -53,7 +53,10 @@ fn main() {
     // ── 5. Contains ──
     println!("5. Contains:");
     println!("   'name'    → {}", map.contains_key(&"name".to_string()));
-    println!("   'missing' → {}", map.contains_key(&"missing".to_string()));
+    println!(
+        "   'missing' → {}",
+        map.contains_key(&"missing".to_string())
+    );
 
     println!("\n✅ Done!");
 }

@@ -36,20 +36,20 @@
 extern crate alloc;
 
 mod core;
-mod raw;
 mod iter;
-mod traits;
+mod raw;
 #[cfg(all(target_arch = "x86_64", feature = "simd"))]
 mod simd;
 #[cfg(feature = "std")]
 mod sync;
+mod traits;
 
 // ── Re-exports ──
+pub use crate::core::bucket::Bucket;
 pub use crate::core::meta::MetaWord;
 pub use crate::core::slot::Slot;
-pub use crate::core::bucket::Bucket;
-pub use raw::PulseMapRaw;
 pub use iter::{RawIter, TypedIter};
+pub use raw::PulseMapRaw;
 #[cfg(feature = "std")]
 pub use sync::ConcurrentPulseMap;
 
@@ -129,112 +129,184 @@ pub trait PulseValue: Sized {
 
 impl PulseKey for u8 {
     type Bytes = [u8; 1];
-    fn to_bytes(&self) -> [u8; 1] { [*self] }
-    fn from_bytes(b: &[u8]) -> Option<Self> { b.first().copied() }
+    fn to_bytes(&self) -> [u8; 1] {
+        [*self]
+    }
+    fn from_bytes(b: &[u8]) -> Option<Self> {
+        b.first().copied()
+    }
 }
 
 impl PulseKey for u16 {
     type Bytes = [u8; 2];
-    fn to_bytes(&self) -> [u8; 2] { self.to_le_bytes() }
-    fn from_bytes(b: &[u8]) -> Option<Self> { b.try_into().ok().map(u16::from_le_bytes) }
+    fn to_bytes(&self) -> [u8; 2] {
+        self.to_le_bytes()
+    }
+    fn from_bytes(b: &[u8]) -> Option<Self> {
+        b.try_into().ok().map(u16::from_le_bytes)
+    }
 }
 
 impl PulseKey for u32 {
     type Bytes = [u8; 4];
-    fn to_bytes(&self) -> [u8; 4] { self.to_le_bytes() }
-    fn from_bytes(b: &[u8]) -> Option<Self> { b.try_into().ok().map(u32::from_le_bytes) }
+    fn to_bytes(&self) -> [u8; 4] {
+        self.to_le_bytes()
+    }
+    fn from_bytes(b: &[u8]) -> Option<Self> {
+        b.try_into().ok().map(u32::from_le_bytes)
+    }
 }
 
 impl PulseKey for u64 {
     type Bytes = [u8; 8];
-    fn to_bytes(&self) -> [u8; 8] { self.to_le_bytes() }
-    fn from_bytes(b: &[u8]) -> Option<Self> { b.try_into().ok().map(u64::from_le_bytes) }
+    fn to_bytes(&self) -> [u8; 8] {
+        self.to_le_bytes()
+    }
+    fn from_bytes(b: &[u8]) -> Option<Self> {
+        b.try_into().ok().map(u64::from_le_bytes)
+    }
 }
 
 impl PulseKey for i32 {
     type Bytes = [u8; 4];
-    fn to_bytes(&self) -> [u8; 4] { self.to_le_bytes() }
-    fn from_bytes(b: &[u8]) -> Option<Self> { b.try_into().ok().map(i32::from_le_bytes) }
+    fn to_bytes(&self) -> [u8; 4] {
+        self.to_le_bytes()
+    }
+    fn from_bytes(b: &[u8]) -> Option<Self> {
+        b.try_into().ok().map(i32::from_le_bytes)
+    }
 }
 
 impl PulseKey for i64 {
     type Bytes = [u8; 8];
-    fn to_bytes(&self) -> [u8; 8] { self.to_le_bytes() }
-    fn from_bytes(b: &[u8]) -> Option<Self> { b.try_into().ok().map(i64::from_le_bytes) }
+    fn to_bytes(&self) -> [u8; 8] {
+        self.to_le_bytes()
+    }
+    fn from_bytes(b: &[u8]) -> Option<Self> {
+        b.try_into().ok().map(i64::from_le_bytes)
+    }
 }
 
 impl PulseKey for String {
     type Bytes = Vec<u8>;
-    fn to_bytes(&self) -> Vec<u8> { self.as_bytes().to_vec() }
-    fn from_bytes(b: &[u8]) -> Option<Self> { std::str::from_utf8(b).ok().map(String::from) }
+    fn to_bytes(&self) -> Vec<u8> {
+        self.as_bytes().to_vec()
+    }
+    fn from_bytes(b: &[u8]) -> Option<Self> {
+        std::str::from_utf8(b).ok().map(String::from)
+    }
 }
 
 impl PulseKey for Vec<u8> {
     type Bytes = Vec<u8>;
-    fn to_bytes(&self) -> Vec<u8> { self.clone() }
-    fn from_bytes(b: &[u8]) -> Option<Self> { Some(b.to_vec()) }
+    fn to_bytes(&self) -> Vec<u8> {
+        self.clone()
+    }
+    fn from_bytes(b: &[u8]) -> Option<Self> {
+        Some(b.to_vec())
+    }
 }
 
 impl<const N: usize> PulseKey for [u8; N] {
     type Bytes = [u8; N];
-    fn to_bytes(&self) -> [u8; N] { *self }
-    fn from_bytes(b: &[u8]) -> Option<Self> { b.try_into().ok() }
+    fn to_bytes(&self) -> [u8; N] {
+        *self
+    }
+    fn from_bytes(b: &[u8]) -> Option<Self> {
+        b.try_into().ok()
+    }
 }
 
 // ── Built-in PulseValue implementations ──
 
 impl PulseValue for u8 {
     type Bytes = [u8; 1];
-    fn to_bytes(&self) -> [u8; 1] { [*self] }
-    fn from_bytes(b: &[u8]) -> Option<Self> { b.first().copied() }
+    fn to_bytes(&self) -> [u8; 1] {
+        [*self]
+    }
+    fn from_bytes(b: &[u8]) -> Option<Self> {
+        b.first().copied()
+    }
 }
 
 impl PulseValue for u16 {
     type Bytes = [u8; 2];
-    fn to_bytes(&self) -> [u8; 2] { self.to_le_bytes() }
-    fn from_bytes(b: &[u8]) -> Option<Self> { b.try_into().ok().map(u16::from_le_bytes) }
+    fn to_bytes(&self) -> [u8; 2] {
+        self.to_le_bytes()
+    }
+    fn from_bytes(b: &[u8]) -> Option<Self> {
+        b.try_into().ok().map(u16::from_le_bytes)
+    }
 }
 
 impl PulseValue for u32 {
     type Bytes = [u8; 4];
-    fn to_bytes(&self) -> [u8; 4] { self.to_le_bytes() }
-    fn from_bytes(b: &[u8]) -> Option<Self> { b.try_into().ok().map(u32::from_le_bytes) }
+    fn to_bytes(&self) -> [u8; 4] {
+        self.to_le_bytes()
+    }
+    fn from_bytes(b: &[u8]) -> Option<Self> {
+        b.try_into().ok().map(u32::from_le_bytes)
+    }
 }
 
 impl PulseValue for u64 {
     type Bytes = [u8; 8];
-    fn to_bytes(&self) -> [u8; 8] { self.to_le_bytes() }
-    fn from_bytes(b: &[u8]) -> Option<Self> { b.try_into().ok().map(u64::from_le_bytes) }
+    fn to_bytes(&self) -> [u8; 8] {
+        self.to_le_bytes()
+    }
+    fn from_bytes(b: &[u8]) -> Option<Self> {
+        b.try_into().ok().map(u64::from_le_bytes)
+    }
 }
 
 impl PulseValue for i32 {
     type Bytes = [u8; 4];
-    fn to_bytes(&self) -> [u8; 4] { self.to_le_bytes() }
-    fn from_bytes(b: &[u8]) -> Option<Self> { b.try_into().ok().map(i32::from_le_bytes) }
+    fn to_bytes(&self) -> [u8; 4] {
+        self.to_le_bytes()
+    }
+    fn from_bytes(b: &[u8]) -> Option<Self> {
+        b.try_into().ok().map(i32::from_le_bytes)
+    }
 }
 
 impl PulseValue for i64 {
     type Bytes = [u8; 8];
-    fn to_bytes(&self) -> [u8; 8] { self.to_le_bytes() }
-    fn from_bytes(b: &[u8]) -> Option<Self> { b.try_into().ok().map(i64::from_le_bytes) }
+    fn to_bytes(&self) -> [u8; 8] {
+        self.to_le_bytes()
+    }
+    fn from_bytes(b: &[u8]) -> Option<Self> {
+        b.try_into().ok().map(i64::from_le_bytes)
+    }
 }
 
 impl PulseValue for String {
     type Bytes = Vec<u8>;
-    fn to_bytes(&self) -> Vec<u8> { self.as_bytes().to_vec() }
-    fn from_bytes(b: &[u8]) -> Option<Self> { std::str::from_utf8(b).ok().map(String::from) }
+    fn to_bytes(&self) -> Vec<u8> {
+        self.as_bytes().to_vec()
+    }
+    fn from_bytes(b: &[u8]) -> Option<Self> {
+        std::str::from_utf8(b).ok().map(String::from)
+    }
 }
 
 impl PulseValue for Vec<u8> {
     type Bytes = Vec<u8>;
-    fn to_bytes(&self) -> Vec<u8> { self.clone() }
-    fn from_bytes(b: &[u8]) -> Option<Self> { Some(b.to_vec()) }
+    fn to_bytes(&self) -> Vec<u8> {
+        self.clone()
+    }
+    fn from_bytes(b: &[u8]) -> Option<Self> {
+        Some(b.to_vec())
+    }
 }
 
 impl PulseValue for bool {
     type Bytes = [u8; 1];
-    fn to_bytes(&self) -> [u8; 1] { [*self as u8] }
-    fn from_bytes(b: &[u8]) -> Option<Self> { b.first().map(|&v| v != 0) }
+    fn to_bytes(&self) -> [u8; 1] {
+        [*self as u8]
+    }
+    fn from_bytes(b: &[u8]) -> Option<Self> {
+        b.first().map(|&v| v != 0)
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -306,19 +378,29 @@ impl<K: PulseKey, V: PulseValue> TypedPulseMap<K, V> {
     }
 
     #[inline]
-    pub fn len(&self) -> usize { self.raw.len() }
+    pub fn len(&self) -> usize {
+        self.raw.len()
+    }
 
     #[inline]
-    pub fn is_empty(&self) -> bool { self.raw.is_empty() }
+    pub fn is_empty(&self) -> bool {
+        self.raw.is_empty()
+    }
 
     #[inline]
-    pub fn capacity(&self) -> usize { self.raw.capacity() }
+    pub fn capacity(&self) -> usize {
+        self.raw.capacity()
+    }
 
     #[inline]
-    pub fn load_factor(&self) -> f64 { self.raw.load_factor() }
+    pub fn load_factor(&self) -> f64 {
+        self.raw.load_factor()
+    }
 
     #[inline]
-    pub fn eviction_count(&self) -> usize { self.raw.eviction_count() }
+    pub fn eviction_count(&self) -> usize {
+        self.raw.eviction_count()
+    }
 
     /// Gets the given key's entry in the map for in-place manipulation.
     ///
@@ -333,7 +415,11 @@ impl<K: PulseKey, V: PulseValue> TypedPulseMap<K, V> {
         let kb = key.to_bytes();
         let existing = self.raw.peek(kb.as_ref()).and_then(|vb| V::from_bytes(vb));
         match existing {
-            Some(val) => Entry::Occupied(OccupiedEntry { map: self, key, value: val }),
+            Some(val) => Entry::Occupied(OccupiedEntry {
+                map: self,
+                key,
+                value: val,
+            }),
             None => Entry::Vacant(VacantEntry { map: self, key }),
         }
     }
@@ -487,7 +573,9 @@ mod tests {
         }
         let mut hits = 0;
         for i in 0u32..1000 {
-            if map.get(&i.to_le_bytes()).is_some() { hits += 1; }
+            if map.get(&i.to_le_bytes()).is_some() {
+                hits += 1;
+            }
         }
         assert!(hits > 500, "Expected >500 hits, got {}", hits);
     }
@@ -531,7 +619,11 @@ mod tests {
 
     #[test]
     fn test_bucket_size() {
-        assert_eq!(std::mem::size_of::<Bucket>(), 64, "Bucket must be exactly 64 bytes");
+        assert_eq!(
+            std::mem::size_of::<Bucket>(),
+            64,
+            "Bucket must be exactly 64 bytes"
+        );
     }
 
     // ── Typed API tests ──
@@ -701,16 +793,20 @@ mod tests {
         use std::thread;
 
         let map = Arc::new(ConcurrentPulseMap::<u32, u32>::new(16384));
-        let handles: Vec<_> = (0..4).map(|t| {
-            let m = map.clone();
-            thread::spawn(move || {
-                for i in 0..1000u32 {
-                    m.insert(t * 10000 + i, i);
-                }
+        let handles: Vec<_> = (0..4)
+            .map(|t| {
+                let m = map.clone();
+                thread::spawn(move || {
+                    for i in 0..1000u32 {
+                        m.insert(t * 10000 + i, i);
+                    }
+                })
             })
-        }).collect();
+            .collect();
 
-        for h in handles { h.join().unwrap(); }
+        for h in handles {
+            h.join().unwrap();
+        }
         // With 16384 buckets (65K capacity) and 4000 entries, no eviction
         assert!(map.len() >= 3900); // Allow tiny tolerance for hash collisions
     }
@@ -728,20 +824,24 @@ mod tests {
         }
 
         // Concurrent readers + writers
-        let handles: Vec<_> = (0..4).map(|t| {
-            let m = map.clone();
-            thread::spawn(move || {
-                for i in 0..500u32 {
-                    if t % 2 == 0 {
-                        m.insert(500 + t * 1000 + i, i);
-                    } else {
-                        let _ = m.get(&(i % 500));
+        let handles: Vec<_> = (0..4)
+            .map(|t| {
+                let m = map.clone();
+                thread::spawn(move || {
+                    for i in 0..500u32 {
+                        if t % 2 == 0 {
+                            m.insert(500 + t * 1000 + i, i);
+                        } else {
+                            let _ = m.get(&(i % 500));
+                        }
                     }
-                }
+                })
             })
-        }).collect();
+            .collect();
 
-        for h in handles { h.join().unwrap(); }
+        for h in handles {
+            h.join().unwrap();
+        }
         assert!(map.len() > 0);
     }
 
