@@ -11,8 +11,8 @@
 //! └──────────────────────────────────────────────────┘
 //! ```
 
-use crate::core::meta::MetaWord;
-use crate::core::slot::Slot;
+use crate::engine::meta::MetaWord;
+use crate::engine::slot::Slot;
 
 /// A 64-byte cache-line-aligned bucket containing metadata and 4 slots.
 #[derive(Clone, Copy)]
@@ -34,4 +34,4 @@ impl Bucket {
 }
 
 // Compile-time assertion: Bucket must be exactly 64 bytes
-const _: () = assert!(::core::mem::size_of::<Bucket>() == 64);
+const _: () = assert!(core::mem::size_of::<Bucket>() == 64);

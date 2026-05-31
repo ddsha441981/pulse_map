@@ -92,6 +92,7 @@ impl MetaWord {
 
     /// Branchless scalar match — no if-statements, pure bit arithmetic.
     #[inline]
+    #[allow(dead_code)]
     fn match_mask_branchless(&self, h2: u8) -> u8 {
         let v = self.0;
         let h2 = h2 & 0x7F;

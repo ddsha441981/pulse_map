@@ -6,7 +6,7 @@
 //! - `RawIter` — iterates over `(&[u8], &[u8])` raw key-value pairs
 //! - `TypedIter` — iterates over `(K, V)` deserialized pairs
 
-use crate::core::hash::HashResult;
+use crate::engine::hash::HashResult;
 use crate::raw::PulseMapRaw;
 use crate::{PulseKey, PulseValue, SlotState};
 

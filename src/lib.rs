@@ -40,7 +40,7 @@ use alloc::{string::String, vec::Vec};
 #[cfg(feature = "std")]
 use std::{string::String, vec::Vec};
 
-mod core;
+mod engine;
 mod iter;
 mod raw;
 #[cfg(all(target_arch = "x86_64", feature = "simd"))]
@@ -50,9 +50,9 @@ mod sync;
 mod traits;
 
 // ── Re-exports ──
-pub use crate::core::bucket::Bucket;
-pub use crate::core::meta::MetaWord;
-pub use crate::core::slot::Slot;
+pub use crate::engine::bucket::Bucket;
+pub use crate::engine::meta::MetaWord;
+pub use crate::engine::slot::Slot;
 pub use iter::{RawIter, TypedIter};
 pub use raw::PulseMapRaw;
 #[cfg(feature = "std")]
@@ -198,7 +198,7 @@ impl PulseKey for String {
         self.as_bytes().to_vec()
     }
     fn from_bytes(b: &[u8]) -> Option<Self> {
-        ::core::str::from_utf8(b).ok().map(String::from)
+        core::str::from_utf8(b).ok().map(String::from)
     }
 }
 
@@ -290,7 +290,7 @@ impl PulseValue for String {
         self.as_bytes().to_vec()
     }
     fn from_bytes(b: &[u8]) -> Option<Self> {
-        ::core::str::from_utf8(b).ok().map(String::from)
+        core::str::from_utf8(b).ok().map(String::from)
     }
 }
 
@@ -334,7 +334,7 @@ impl PulseValue for bool {
 /// ```
 pub struct TypedPulseMap<K: PulseKey, V: PulseValue> {
     raw: PulseMapRaw,
-    _marker: ::core::marker::PhantomData<(K, V)>,
+    _marker: core::marker::PhantomData<(K, V)>,
 }
 
 impl<K: PulseKey, V: PulseValue> TypedPulseMap<K, V> {
@@ -342,7 +342,7 @@ impl<K: PulseKey, V: PulseValue> TypedPulseMap<K, V> {
     pub fn new(num_buckets: usize) -> Self {
         Self {
             raw: PulseMapRaw::new(num_buckets),
-            _marker: ::core::marker::PhantomData,
+            _marker: core::marker::PhantomData,
         }
     }
 
@@ -625,7 +625,7 @@ mod tests {
     #[test]
     fn test_bucket_size() {
         assert_eq!(
-            std::mem::size_of::<Bucket>(),
+            core::mem::size_of::<Bucket>(),
             64,
             "Bucket must be exactly 64 bytes"
         );
@@ -641,6 +641,7 @@ mod tests {
         assert_eq!(map.len(), 1);
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn test_typed_string() {
         let mut map = TypedPulseMap::<String, String>::new(16);
@@ -664,6 +665,7 @@ mod tests {
         assert!(!map.contains_key(&6));
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn test_typed_extend() {
         let mut map = TypedPulseMap::<u32, u32>::new(16);
@@ -672,6 +674,7 @@ mod tests {
         assert_eq!(map.get(&2), Some(20));
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn test_typed_debug() {
         let mut map = TypedPulseMap::<u32, u32>::new(16);
@@ -681,6 +684,7 @@ mod tests {
         assert!(debug.contains("len"));
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn test_typed_display() {
         let mut map = TypedPulseMap::<u32, u32>::new(16);
@@ -698,6 +702,7 @@ mod tests {
         assert!(map.eviction_count() > 0);
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn test_typed_iterator() {
         let mut map = TypedPulseMap::<u32, u32>::new(256);
@@ -708,6 +713,7 @@ mod tests {
         assert_eq!(collected.len(), 3);
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn test_typed_from_hashmap() {
         use std::collections::HashMap;
@@ -764,6 +770,7 @@ mod tests {
 
     // ── Concurrent PulseMap tests ──
 
+    #[cfg(feature = "std")]
     #[test]
     fn test_concurrent_basic() {
         let map = ConcurrentPulseMap::<u32, u32>::new(64);
@@ -775,6 +782,7 @@ mod tests {
         assert_eq!(map.len(), 2);
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn test_concurrent_remove() {
         let map = ConcurrentPulseMap::<u32, u32>::new(64);
@@ -784,6 +792,7 @@ mod tests {
         assert!(!map.remove(&1));
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn test_concurrent_contains_key() {
         let map = ConcurrentPulseMap::<u32, u32>::new(64);
@@ -792,6 +801,7 @@ mod tests {
         assert!(!map.contains_key(&6));
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn test_concurrent_multithread_insert() {
         use std::sync::Arc;
@@ -816,6 +826,7 @@ mod tests {
         assert!(map.len() >= 3900); // Allow tiny tolerance for hash collisions
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn test_concurrent_multithread_read_write() {
         use std::sync::Arc;
@@ -850,6 +861,7 @@ mod tests {
         assert!(map.len() > 0);
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn test_concurrent_display() {
         let map = ConcurrentPulseMap::<u32, u32>::new(16);
@@ -859,6 +871,7 @@ mod tests {
         assert!(s.contains("1/"));
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn test_concurrent_manual_resize() {
         let map = ConcurrentPulseMap::<u32, u32>::new(256);
@@ -881,6 +894,7 @@ mod tests {
         assert_eq!(map.get(&39), Some(390));
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn test_concurrent_auto_resize() {
         let map = ConcurrentPulseMap::<u32, u32>::with_auto_resize(16);

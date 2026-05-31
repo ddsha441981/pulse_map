@@ -30,6 +30,14 @@ lru = "0.12"
 name = "benchmark"
 harness = false
 
+[[example]]
+name = "basic"
+required-features = ["std"]
+
+[[example]]
+name = "concurrent"
+required-features = ["std"]
+
 [profile.release]
 opt-level = 3
 lto = true

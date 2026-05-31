@@ -26,9 +26,9 @@ use std::marker::PhantomData;
 use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 use std::sync::{Mutex, RwLock};
 
-use crate::core::bucket::Bucket;
-use crate::core::hash::compute_hash;
-use crate::core::slab::SlabPool;
+use crate::engine::bucket::Bucket;
+use crate::engine::hash::compute_hash;
+use crate::engine::slab::SlabPool;
 use crate::{PulseKey, PulseValue, SlotState};
 
 // ═══════════════════════════════════════════════════════════════

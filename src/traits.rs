@@ -14,10 +14,10 @@ use alloc::format;
 
 // ── Debug trait ──
 
-impl<K: PulseKey + ::core::fmt::Debug, V: PulseValue + ::core::fmt::Debug> ::core::fmt::Debug
+impl<K: PulseKey + core::fmt::Debug, V: PulseValue + core::fmt::Debug> core::fmt::Debug
 for TypedPulseMap<K, V>
 {
-    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("TypedPulseMap")
             .field("len", &self.len())
             .field("capacity", &self.capacity())
@@ -32,8 +32,8 @@ for TypedPulseMap<K, V>
 
 // ── Display trait ──
 
-impl<K: PulseKey, V: PulseValue> ::core::fmt::Display for TypedPulseMap<K, V> {
-    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+impl<K: PulseKey, V: PulseValue> core::fmt::Display for TypedPulseMap<K, V> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(
             f,
             "PulseMap({}/{} entries, {:.1}% load, {} evictions)",

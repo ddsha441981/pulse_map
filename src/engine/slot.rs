@@ -17,8 +17,8 @@
 //!   [6..13] slab_ptr (u64, 8 bytes)
 //! ```
 
-use crate::core::hash::HashResult;
-use crate::core::slab::SlabEntry;
+use crate::engine::hash::HashResult;
+use crate::engine::slab::SlabEntry;
 
 /// 14-byte slot that stores either inline key+value or a slab pointer.
 #[derive(Clone, Copy)]

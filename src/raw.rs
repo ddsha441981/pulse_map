@@ -6,9 +6,9 @@
 //! Use `PulseMapRaw` directly when you want maximum control with `&[u8]` keys/values.
 //! For ergonomic typed access, use `PulseMap<K, V>` instead.
 
-use crate::core::bucket::Bucket;
-use crate::core::hash::compute_hash;
-use crate::core::slab::SlabPool;
+use crate::engine::bucket::Bucket;
+use crate::engine::hash::compute_hash;
+use crate::engine::slab::SlabPool;
 use crate::SlotState;
 #[cfg(not(feature = "std"))]
 use alloc::vec;
@@ -118,7 +118,7 @@ impl PulseMapRaw {
         #[cfg(target_arch = "x86_64")]
         unsafe {
             let ptr = self.buckets.as_ptr().add(bucket_idx) as *const i8;
-            ::core::arch::x86_64::_mm_prefetch(ptr, ::core::arch::x86_64::_MM_HINT_T0);
+            core::arch::x86_64::_mm_prefetch(ptr, core::arch::x86_64::_MM_HINT_T0);
         }
 
         let bucket = &self.buckets[bucket_idx];
