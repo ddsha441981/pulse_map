@@ -14,6 +14,7 @@
   - [ConcurrentPulseMap](./api-concurrent.md)
   - [Entry API](./api-entry.md)
 - [Eviction Strategy](./eviction.md)
+- [TTL — Automatic Expiry](./ttl.md)
 - [Concurrency Model](./concurrency.md)
 
 ---

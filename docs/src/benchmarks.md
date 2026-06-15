@@ -1,33 +1,32 @@
 # Performance & Benchmarks
 
-## Benchmark Results (AMD Ryzen 7 5800X, Linux 6.x)
+> Results from v0.6.0 · Criterion · Linux · i7-8650U
 
-### Single-Threaded Throughput
+## PulseMap vs `lru` crate (same category — bounded cache)
 
-| Operation | Entries | PulseMap | HashMap | Speedup |
-|-----------|:-------:|:-------:|:-------:|:-------:|
-| Insert | 10K | 4.2ns/op | 18ns/op | **4.3×** |
-| Get (hit) | 10K | 3.8ns/op | 12ns/op | **3.2×** |
-| Get (miss) | 10K | 2.1ns/op | 8ns/op | **3.8×** |
-| Remove | 10K | 3.9ns/op | 15ns/op | **3.8×** |
-| Mixed (50/50) | 10K | 4.0ns/op | 15ns/op | **3.7×** |
+| Benchmark (100K ops) | PulseMap | `lru` crate | Result |
+|---------------------|:-------:|:-----------:|:------:|
+| **INSERT** | **13.8 ms** | 19.1 ms | ✅ **1.4x faster** |
+| **MIXED (insert+lookup)** | **16.0 ms** | 23.7 ms | ✅ **1.5x faster** |
+| **EVICTION (50K)** | **1.5 ms** | 2.2 ms | ✅ **1.5x faster** |
+| LOOKUP | 9.8 ms | **5.4 ms** | lru 1.8x faster |
 
-### Concurrent Throughput (8 threads)
+> **Why is lookup slower?** `lru` stores typed values as native pointers. PulseMap stores serialized
+> bytes — enabling `no_std`, multi-language bindings, and a stable memory layout.
+> Closing this gap is the v0.7.0 roadmap item.
 
-| Operation | PulseMap | DashMap | Speedup |
-|-----------|:-------:|:------:|:-------:|
-| Insert | 12M ops/s | 8M ops/s | **1.5×** |
-| Get | 45M ops/s | 35M ops/s | **1.3×** |
-| Mixed (80R/20W) | 38M ops/s | 28M ops/s | **1.4×** |
+## v0.5.0 → v0.6.0 Improvement
 
-### Eviction Workload
+| Benchmark | v0.5.0 | v0.6.0 | Delta |
+|-----------|:------:|:------:|:-----:|
+| raw_mixed_100k | 17.46 ms | **16.0 ms** | ✅ -8% |
+| raw_eviction_50k | 1.10 ms | 1.10 ms | no change |
+| raw_lookup_100k | 7.22 ms | 7.22 ms | no change |
 
-| Scenario | PulseMap | LRU Crate | Speedup |
-|----------|:-------:|:---------:|:-------:|
-| Insert beyond capacity | 5.1ns/op | 7.8ns/op | **1.5×** |
-| Hot-cold (80/20 Zipf) | 93% hit rate | 91% hit rate | **+2% hits** |
+The -8% mixed improvement comes from `remove()` now using `match_mask()` (branchless)
+instead of the old 8-call per-slot brute-force loop.
 
-### Memory Efficiency
+## Memory Efficiency
 
 | Map Size | PulseMap | HashMap | Savings |
 |:--------:|:-------:|:-------:|:-------:|

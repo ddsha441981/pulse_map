@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "navy";
             const default_dark_theme = "rust";
-            window.path_to_searchindex_js = "searchindex-3071a43b.js";
+            window.path_to_searchindex_js = "searchindex-504b7fc9.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-d005dbd8.js"></script>
+        <script src="toc-0be18d89.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -566,6 +566,20 @@ println!("Capacity:  {}", map.capacity());
 println!("Load:      {:.1}%", map.load_factor() * 100.0);
 println!("Evictions: {}", map.eviction_count());
 <span class="boring">}</span></code></pre>
+<h2 id="ttl-v060"><a class="header" href="#ttl-v060">TTL (v0.6.0+)</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Set TTL: entries expire after 500 insertions
+map.set_ttl(500);
+
+// Query state
+println!("TTL setting: {}", map.get_ttl());       // 500
+println!("Epoch:       {}", map.current_epoch()); // total inserts
+
+// Disable TTL
+map.set_ttl(0);
+<span class="boring">}</span></code></pre>
+<p>See the <a href="#ttl--automatic-expiry">TTL page</a> for full details.</p>
 <h2 id="when-to-use-pulsemapraw"><a class="header" href="#when-to-use-pulsemapraw">When to Use PulseMapRaw</a></h2>
 <ul>
 <li>You already have byte-serialized keys/values</li>
@@ -875,6 +889,169 @@ println!("Evictions: {}", map.eviction_count());
 <li><strong>TTL-based expiration</strong> → Planned for v0.6.0</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
+<h1 id="ttl--automatic-expiry"><a class="header" href="#ttl--automatic-expiry">TTL — Automatic Expiry</a></h1>
+<blockquote>
+<p>Added in <strong>v0.6.0</strong></p>
+</blockquote>
+<p>PulseMap supports <strong>insertion-epoch TTL</strong> — entries automatically expire after a fixed number of insertions. No background thread, no timer, zero overhead when disabled.</p>
+<hr>
+<h2 id="how-it-works"><a class="header" href="#how-it-works">How It Works</a></h2>
+<p>Every insert bumps a monotonic <code>current_epoch: u32</code> counter. Each slot stores the epoch at which its entry was inserted (<code>slot_epoch</code>). On every <code>get()</code> or <code>peek()</code>, if TTL is enabled:</p>
+<pre><code>age = current_epoch - slot_epoch
+if age &gt; ttl_epochs → entry is expired → return None
+</code></pre>
+<p>This is a <strong>single wrapping subtraction + comparison</strong> — effectively free on modern CPUs.</p>
+<hr>
+<h2 id="quick-start"><a class="header" href="#quick-start">Quick Start</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use pulse_map::PulseMap;
+
+let mut cache = PulseMap::new(1024);
+
+// Set TTL: entries expire after 500 insertions
+cache.set_ttl(500);
+
+cache.insert(b"session:abc", b"user_data");  // epoch 1
+
+// High-traffic server: 500 more inserts
+for i in 0u32..501 {
+    cache.insert(&amp;i.to_le_bytes(), b"traffic");
+}
+
+// session:abc was inserted at epoch 1
+// current_epoch is now 502, age = 501 &gt; ttl = 500
+assert_eq!(cache.get(b"session:abc"), None);  // expired ✓
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="api-1"><a class="header" href="#api-1">API</a></h2>
+<h3 id="pulsemap-raw-u8"><a class="header" href="#pulsemap-raw-u8">PulseMap (raw <code>&amp;[u8]</code>)</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>map.set_ttl(n: u32)      // set TTL in insertion epochs (0 = disabled)
+map.get_ttl() -&gt; u32     // query current TTL setting
+map.current_epoch() -&gt; u32  // total insertions so far
+<span class="boring">}</span></code></pre>
+<h3 id="typedpulsemapk-v-1"><a class="header" href="#typedpulsemapk-v-1">TypedPulseMap&lt;K, V&gt;</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>map.set_ttl(500u32);
+map.get_ttl()       // → 500
+map.current_epoch() // → total inserts
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="ttl--0--disabled-default"><a class="header" href="#ttl--0--disabled-default">TTL = 0 → Disabled (Default)</a></h2>
+<p>By default, <code>ttl_epochs = 0</code>. The expiry check is:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>if self.ttl_epochs == 0 {
+    return false;  // short-circuit: zero overhead
+}
+<span class="boring">}</span></code></pre>
+<p><strong>Backward compatible</strong> — existing code works without any changes.</p>
+<hr>
+<h2 id="update-refreshes-epoch"><a class="header" href="#update-refreshes-epoch">Update Refreshes Epoch</a></h2>
+<p>Re-inserting the same key resets its epoch to <code>current_epoch</code>:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>cache.set_ttl(3);
+
+cache.insert(b"key", b"v1");  // epoch 1
+cache.insert(b"a",   b"x");   // epoch 2
+cache.insert(b"b",   b"y");   // epoch 3
+
+// key's age is now 2, about to expire...
+// Re-insert before it expires:
+cache.insert(b"key", b"v2");  // epoch 4 — refreshed!
+
+cache.insert(b"c", b"z");     // epoch 5 → key age = 1 (alive)
+assert_eq!(cache.get(b"key"), Some(&amp;b"v2"[..]));
+<span class="boring">}</span></code></pre>
+<p>This is useful for <strong>session stores</strong> — each access or heartbeat refreshes the TTL.</p>
+<hr>
+<h2 id="lazy-eviction"><a class="header" href="#lazy-eviction">Lazy Eviction</a></h2>
+<p>Expired slots are <strong>not eagerly removed</strong>. They are reclaimed lazily:</p>
+<ol>
+<li><code>get()</code> / <code>peek()</code> — returns <code>None</code> for expired entries (no cleanup)</li>
+<li><code>insert()</code> — when searching for a free slot, expired slots are treated as available</li>
+</ol>
+<p>This means <strong>no background thread, no periodic scan, no latency spikes</strong>.</p>
+<pre><code>Expired slot detected during insert → reuse it immediately
+No extra memory cost, no timer interrupt
+</code></pre>
+<hr>
+<h2 id="choosing-a-ttl-value"><a class="header" href="#choosing-a-ttl-value">Choosing a TTL Value</a></h2>
+<p>TTL is measured in <strong>insertions</strong>, not wall-clock time. To convert:</p>
+<pre><code>ttl_epochs = expected_inserts_per_second × desired_ttl_seconds
+
+Example:
+  Server: 10,000 inserts/sec
+  Desired TTL: 60 seconds
+  → set_ttl(600_000)
+</code></pre>
+<p>This makes TTL workload-proportional — a busier server expires entries faster, which is often the desired behavior for rate limiters and caches.</p>
+<hr>
+<h2 id="typedpulsemap-example"><a class="header" href="#typedpulsemap-example">TypedPulseMap Example</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use pulse_map::TypedPulseMap;
+
+let mut sessions = TypedPulseMap::&lt;String, String&gt;::new(1024);
+sessions.set_ttl(10_000); // expire after 10K inserts
+
+sessions.insert("user:42".to_string(), "token_abc".to_string());
+
+// ... much later, after 10K+ inserts ...
+
+assert_eq!(sessions.get(&amp;"user:42".to_string()), None); // expired
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="epoch-counter-overflow"><a class="header" href="#epoch-counter-overflow">Epoch Counter Overflow</a></h2>
+<p><code>current_epoch</code> is a <code>u32</code> — max value is <code>4,294,967,295</code> (4.3 billion inserts).</p>
+<p>At 1 million inserts/sec, it wraps after ~71 minutes. The expiry check uses <strong>wrapping subtraction</strong> (<code>wrapping_sub</code>) so wrap-around is handled correctly without panicking.</p>
+<hr>
+<h2 id="comparison-with-redis-ttl"><a class="header" href="#comparison-with-redis-ttl">Comparison with Redis TTL</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Feature</th><th style="text-align: center">Redis TTL</th><th style="text-align: center">PulseMap TTL</th></tr>
+</thead>
+<tbody>
+<tr><td>Time unit</td><td style="text-align: center">Seconds / milliseconds</td><td style="text-align: center">Insertions</td></tr>
+<tr><td>Background expiry</td><td style="text-align: center">✅ Yes</td><td style="text-align: center">❌ Lazy only</td></tr>
+<tr><td>Refresh on access</td><td style="text-align: center">Manual (<code>EXPIRE</code> cmd)</td><td style="text-align: center">Re-insert</td></tr>
+<tr><td>Network hop</td><td style="text-align: center">~100μs</td><td style="text-align: center">0 (in-process)</td></tr>
+<tr><td>Memory bound</td><td style="text-align: center">No</td><td style="text-align: center">✅ Fixed</td></tr>
+<tr><td>No GC pauses</td><td style="text-align: center">❌ No</td><td style="text-align: center">✅ Yes</td></tr>
+</tbody>
+</table>
+</div>
+<blockquote>
+<p>PulseMap TTL is ideal for <strong>in-process</strong> hot caches. Use Redis when you need cross-process TTL or millisecond precision.</p>
+</blockquote>
+<hr>
+<h2 id="implementation-details"><a class="header" href="#implementation-details">Implementation Details</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// PulseMapRaw fields (raw.rs)
+epochs: Vec&lt;u32&gt;,      // one per slot: epochs[bucket_idx * 4 + slot_idx]
+current_epoch: u32,    // global counter, wrapping
+ttl_epochs: u32,       // 0 = disabled
+
+// On every insert:
+self.current_epoch = self.current_epoch.wrapping_add(1);
+self.epochs[bucket_idx * 4 + slot_idx] = self.current_epoch;
+
+// On get():
+fn is_expired(&amp;self, bucket_idx: usize, slot_idx: u8) -&gt; bool {
+    if self.ttl_epochs == 0 { return false; }
+    let slot_epoch = self.epochs[bucket_idx * 4 + slot_idx as usize];
+    self.current_epoch.wrapping_sub(slot_epoch) &gt; self.ttl_epochs
+}
+<span class="boring">}</span></code></pre>
+<p>Memory overhead: <code>num_buckets × 4 × 4 bytes</code> (one <code>u32</code> per slot).
+For 1024 buckets: <code>1024 × 4 × 4 = 16 KB</code> — negligible.</p>
+<div style="break-before: page; page-break-before: always;"></div>
 <h1 id="concurrency-model"><a class="header" href="#concurrency-model">Concurrency Model</a></h1>
 <p>PulseMap uses a <strong>two-level locking</strong> scheme designed for maximum concurrent throughput.</p>
 <h2 id="lock-architecture"><a class="header" href="#lock-architecture">Lock Architecture</a></h2>
@@ -1092,48 +1269,44 @@ SlabEntry {
 </code></pre>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="performance--benchmarks"><a class="header" href="#performance--benchmarks">Performance &amp; Benchmarks</a></h1>
-<h2 id="benchmark-results-amd-ryzen-7-5800x-linux-6x"><a class="header" href="#benchmark-results-amd-ryzen-7-5800x-linux-6x">Benchmark Results (AMD Ryzen 7 5800X, Linux 6.x)</a></h2>
-<h3 id="single-threaded-throughput"><a class="header" href="#single-threaded-throughput">Single-Threaded Throughput</a></h3>
+<blockquote>
+<p>Results from v0.6.0 · Criterion · Linux · i7-8650U</p>
+</blockquote>
+<h2 id="pulsemap-vs-lru-crate-same-category--bounded-cache"><a class="header" href="#pulsemap-vs-lru-crate-same-category--bounded-cache">PulseMap vs <code>lru</code> crate (same category — bounded cache)</a></h2>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Operation</th><th style="text-align: center">Entries</th><th style="text-align: center">PulseMap</th><th style="text-align: center">HashMap</th><th style="text-align: center">Speedup</th></tr>
+<tr><th>Benchmark (100K ops)</th><th style="text-align: center">PulseMap</th><th style="text-align: center"><code>lru</code> crate</th><th style="text-align: center">Result</th></tr>
 </thead>
 <tbody>
-<tr><td>Insert</td><td style="text-align: center">10K</td><td style="text-align: center">4.2ns/op</td><td style="text-align: center">18ns/op</td><td style="text-align: center"><strong>4.3×</strong></td></tr>
-<tr><td>Get (hit)</td><td style="text-align: center">10K</td><td style="text-align: center">3.8ns/op</td><td style="text-align: center">12ns/op</td><td style="text-align: center"><strong>3.2×</strong></td></tr>
-<tr><td>Get (miss)</td><td style="text-align: center">10K</td><td style="text-align: center">2.1ns/op</td><td style="text-align: center">8ns/op</td><td style="text-align: center"><strong>3.8×</strong></td></tr>
-<tr><td>Remove</td><td style="text-align: center">10K</td><td style="text-align: center">3.9ns/op</td><td style="text-align: center">15ns/op</td><td style="text-align: center"><strong>3.8×</strong></td></tr>
-<tr><td>Mixed (50/50)</td><td style="text-align: center">10K</td><td style="text-align: center">4.0ns/op</td><td style="text-align: center">15ns/op</td><td style="text-align: center"><strong>3.7×</strong></td></tr>
+<tr><td><strong>INSERT</strong></td><td style="text-align: center"><strong>13.8 ms</strong></td><td style="text-align: center">19.1 ms</td><td style="text-align: center">✅ <strong>1.4x faster</strong></td></tr>
+<tr><td><strong>MIXED (insert+lookup)</strong></td><td style="text-align: center"><strong>16.0 ms</strong></td><td style="text-align: center">23.7 ms</td><td style="text-align: center">✅ <strong>1.5x faster</strong></td></tr>
+<tr><td><strong>EVICTION (50K)</strong></td><td style="text-align: center"><strong>1.5 ms</strong></td><td style="text-align: center">2.2 ms</td><td style="text-align: center">✅ <strong>1.5x faster</strong></td></tr>
+<tr><td>LOOKUP</td><td style="text-align: center">9.8 ms</td><td style="text-align: center"><strong>5.4 ms</strong></td><td style="text-align: center">lru 1.8x faster</td></tr>
 </tbody>
 </table>
 </div>
-<h3 id="concurrent-throughput-8-threads"><a class="header" href="#concurrent-throughput-8-threads">Concurrent Throughput (8 threads)</a></h3>
+<blockquote>
+<p><strong>Why is lookup slower?</strong> <code>lru</code> stores typed values as native pointers. PulseMap stores serialized
+bytes — enabling <code>no_std</code>, multi-language bindings, and a stable memory layout.
+Closing this gap is the v0.7.0 roadmap item.</p>
+</blockquote>
+<h2 id="v050--v060-improvement"><a class="header" href="#v050--v060-improvement">v0.5.0 → v0.6.0 Improvement</a></h2>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Operation</th><th style="text-align: center">PulseMap</th><th style="text-align: center">DashMap</th><th style="text-align: center">Speedup</th></tr>
+<tr><th>Benchmark</th><th style="text-align: center">v0.5.0</th><th style="text-align: center">v0.6.0</th><th style="text-align: center">Delta</th></tr>
 </thead>
 <tbody>
-<tr><td>Insert</td><td style="text-align: center">12M ops/s</td><td style="text-align: center">8M ops/s</td><td style="text-align: center"><strong>1.5×</strong></td></tr>
-<tr><td>Get</td><td style="text-align: center">45M ops/s</td><td style="text-align: center">35M ops/s</td><td style="text-align: center"><strong>1.3×</strong></td></tr>
-<tr><td>Mixed (80R/20W)</td><td style="text-align: center">38M ops/s</td><td style="text-align: center">28M ops/s</td><td style="text-align: center"><strong>1.4×</strong></td></tr>
+<tr><td>raw_mixed_100k</td><td style="text-align: center">17.46 ms</td><td style="text-align: center"><strong>16.0 ms</strong></td><td style="text-align: center">✅ -8%</td></tr>
+<tr><td>raw_eviction_50k</td><td style="text-align: center">1.10 ms</td><td style="text-align: center">1.10 ms</td><td style="text-align: center">no change</td></tr>
+<tr><td>raw_lookup_100k</td><td style="text-align: center">7.22 ms</td><td style="text-align: center">7.22 ms</td><td style="text-align: center">no change</td></tr>
 </tbody>
 </table>
 </div>
-<h3 id="eviction-workload"><a class="header" href="#eviction-workload">Eviction Workload</a></h3>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Scenario</th><th style="text-align: center">PulseMap</th><th style="text-align: center">LRU Crate</th><th style="text-align: center">Speedup</th></tr>
-</thead>
-<tbody>
-<tr><td>Insert beyond capacity</td><td style="text-align: center">5.1ns/op</td><td style="text-align: center">7.8ns/op</td><td style="text-align: center"><strong>1.5×</strong></td></tr>
-<tr><td>Hot-cold (80/20 Zipf)</td><td style="text-align: center">93% hit rate</td><td style="text-align: center">91% hit rate</td><td style="text-align: center"><strong>+2% hits</strong></td></tr>
-</tbody>
-</table>
-</div>
-<h3 id="memory-efficiency"><a class="header" href="#memory-efficiency">Memory Efficiency</a></h3>
+<p>The -8% mixed improvement comes from <code>remove()</code> now using <code>match_mask()</code> (branchless)
+instead of the old 8-call per-slot brute-force loop.</p>
+<h2 id="memory-efficiency"><a class="header" href="#memory-efficiency">Memory Efficiency</a></h2>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -1555,8 +1728,32 @@ For <strong>building from source</strong>: Yes, you need Rust + Cargo.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="changelog"><a class="header" href="#changelog">Changelog</a></h1>
 <p>See the full <a href="https://github.com/ddsha441981/pulse_map/blob/main/CHANGELOG.md">CHANGELOG.md</a> in the repository root.</p>
-<h2 id="v050-2026-05-26"><a class="header" href="#v050-2026-05-26">v0.5.0 (2026-05-26)</a></h2>
+<h2 id="v060-2026-06-16"><a class="header" href="#v060-2026-06-16">v0.6.0 (2026-06-16)</a></h2>
 <h3 id="added"><a class="header" href="#added">Added</a></h3>
+<ul>
+<li><strong>TTL via epoch counter</strong> — <code>set_ttl(n)</code> expires entries after <code>n</code> insertions</li>
+<li><code>get_ttl()</code>, <code>current_epoch()</code> — query TTL state</li>
+<li><strong>Slab free list</strong> — evicted slab entries reused instead of leaked</li>
+<li><code>SlabEntry::rewrite()</code> — in-place rewrite on free-list reuse</li>
+</ul>
+<h3 id="changed"><a class="header" href="#changed">Changed</a></h3>
+<ul>
+<li><code>peek()</code> + <code>remove()</code> now use <code>match_mask()</code> — same branchless path as <code>get()</code></li>
+<li><code>SlotState::Deleted</code> removed — was never written, <code>Tombstone</code> is now value <code>2</code></li>
+<li><code>find_free_slot()</code> simplified to <code>!= Full</code> check</li>
+</ul>
+<h3 id="fixed"><a class="header" href="#fixed">Fixed</a></h3>
+<ul>
+<li><strong>Memory leak</strong>: slab entries on eviction/remove now returned to free list</li>
+<li>Slot layout: slab slots store <code>usize</code> index instead of raw <code>*const SlabEntry</code></li>
+</ul>
+<h3 id="tests"><a class="header" href="#tests">Tests</a></h3>
+<ul>
+<li><strong>57 tests</strong> (up from 50)</li>
+</ul>
+<hr>
+<h2 id="v050-2026-05-26"><a class="header" href="#v050-2026-05-26">v0.5.0 (2026-05-26)</a></h2>
+<h3 id="added-1"><a class="header" href="#added-1">Added</a></h3>
 <ul>
 <li><strong>Multi-language FFI bindings</strong> — C, Python (PyO3), Java (Panama FFM), Node.js (napi-rs)</li>
 <li><code>ConcurrentPulseMap</code> — thread-safe wrapper with per-bucket spinlocks</li>
@@ -1566,14 +1763,14 @@ For <strong>building from source</strong>: Yes, you need Rust + Cargo.</p>
 <li><code>Cleaner</code>-based GC safety net for Java bindings</li>
 <li>Null-safety checks across all bindings (63 total tests)</li>
 </ul>
-<h3 id="changed"><a class="header" href="#changed">Changed</a></h3>
+<h3 id="changed-1"><a class="header" href="#changed-1">Changed</a></h3>
 <ul>
 <li>Workspace split: <code>pulse_map</code> (core) + <code>pulse_map_bindings</code> (FFI)</li>
 <li>Documentation URL: <code>https://docs.rs/pulse_map</code></li>
 <li>MSRV declared: <code>rust-version = "1.70.0"</code></li>
 </ul>
 <h2 id="v040-2026-05-26"><a class="header" href="#v040-2026-05-26">v0.4.0 (2026-05-26)</a></h2>
-<h3 id="added-1"><a class="header" href="#added-1">Added</a></h3>
+<h3 id="added-2"><a class="header" href="#added-2">Added</a></h3>
 <ul>
 <li>Benchmark suite via Criterion</li>
 <li>SIMD H2 matching (optional, x86_64)</li>
@@ -1581,21 +1778,21 @@ For <strong>building from source</strong>: Yes, you need Rust + Cargo.</p>
 <li>Iteration support (<code>RawIter</code>, <code>TypedIter</code>)</li>
 </ul>
 <h2 id="v030-2026-05-26"><a class="header" href="#v030-2026-05-26">v0.3.0 (2026-05-26)</a></h2>
-<h3 id="added-2"><a class="header" href="#added-2">Added</a></h3>
+<h3 id="added-3"><a class="header" href="#added-3">Added</a></h3>
 <ul>
 <li>Dynamic resize support</li>
 <li><code>no_std</code> compatibility</li>
 <li>Entry API improvements</li>
 </ul>
 <h2 id="v020-2026-05-22"><a class="header" href="#v020-2026-05-22">v0.2.0 (2026-05-22)</a></h2>
-<h3 id="added-3"><a class="header" href="#added-3">Added</a></h3>
+<h3 id="added-4"><a class="header" href="#added-4">Added</a></h3>
 <ul>
 <li>LFU+LRU hybrid eviction (MetaWord)</li>
 <li>WyHash integration</li>
 <li>H2 fingerprint matching</li>
 </ul>
 <h2 id="v010-2026-05-22"><a class="header" href="#v010-2026-05-22">v0.1.0 (2026-05-22)</a></h2>
-<h3 id="added-4"><a class="header" href="#added-4">Added</a></h3>
+<h3 id="added-5"><a class="header" href="#added-5">Added</a></h3>
 <ul>
 <li>Initial release</li>
 <li>64-byte cache-line bucket architecture</li>
@@ -1604,7 +1801,7 @@ For <strong>building from source</strong>: Yes, you need Rust + Cargo.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="contributing"><a class="header" href="#contributing">Contributing</a></h1>
 <p>See the full <a href="https://github.com/ddsha441981/pulse_map/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a> in the repository root.</p>
-<h2 id="quick-start"><a class="header" href="#quick-start">Quick Start</a></h2>
+<h2 id="quick-start-1"><a class="header" href="#quick-start-1">Quick Start</a></h2>
 <pre><code class="language-bash">git clone https://github.com/ddsha441981/pulse_map.git
 cd pulse_map
 cargo build

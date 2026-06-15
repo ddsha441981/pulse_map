@@ -23,7 +23,7 @@
 
 use std::cell::UnsafeCell;
 use std::marker::PhantomData;
-use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicU8, AtomicUsize, Ordering};
 use std::sync::{Mutex, RwLock};
 
 use crate::engine::bucket::Bucket;
@@ -96,6 +96,8 @@ struct MapInner {
     slab_pool: Mutex<SlabPool>,
     num_buckets: usize,
     bucket_mask: usize,
+    /// Insertion epoch per slot. Separate Mutex allows safe writes under read lock.
+    epochs: Mutex<Vec<u32>>,
 }
 
 // Safety: bucket access is protected by per-bucket spinlocks + RwLock.
@@ -114,6 +116,7 @@ impl MapInner {
             slab_pool: Mutex::new(SlabPool::new()),
             num_buckets: actual,
             bucket_mask: actual - 1,
+            epochs: Mutex::new(vec![0u32; actual * 4]),
         }
     }
 }
@@ -155,6 +158,10 @@ pub struct ConcurrentPulseMap<K: PulseKey, V: PulseValue> {
     eviction_count: AtomicUsize,
     auto_resize: bool,
     resize_threshold: f64,
+    /// Global epoch counter — incremented on every insert.
+    current_epoch: AtomicU32,
+    /// TTL in insertion epochs. 0 = disabled.
+    ttl_epochs: AtomicU32,
     _marker: PhantomData<(K, V)>,
 }
 
@@ -174,6 +181,8 @@ impl<K: PulseKey, V: PulseValue> ConcurrentPulseMap<K, V> {
             eviction_count: AtomicUsize::new(0),
             auto_resize: false,
             resize_threshold: 0.75,
+            current_epoch: AtomicU32::new(0),
+            ttl_epochs: AtomicU32::new(0),
             _marker: PhantomData,
         }
     }
@@ -199,8 +208,50 @@ impl<K: PulseKey, V: PulseValue> ConcurrentPulseMap<K, V> {
             eviction_count: AtomicUsize::new(0),
             auto_resize: true,
             resize_threshold: 0.75,
+            current_epoch: AtomicU32::new(0),
+            ttl_epochs: AtomicU32::new(0),
             _marker: PhantomData,
         }
+    }
+
+    /// Set TTL in insertion epochs. 0 = disabled (default).
+    ///
+    /// Entries inserted more than `ttl_epochs` insertions ago
+    /// are treated as expired — `get()`/`peek()` return `None`.
+    #[inline]
+    pub fn set_ttl(&self, ttl: u32) {
+        self.ttl_epochs.store(ttl, Ordering::Relaxed);
+    }
+
+    /// Returns the current TTL setting (0 = disabled).
+    #[inline]
+    pub fn get_ttl(&self) -> u32 {
+        self.ttl_epochs.load(Ordering::Relaxed)
+    }
+
+    /// Returns the current epoch counter (total insertions so far).
+    #[inline]
+    pub fn current_epoch(&self) -> u32 {
+        self.current_epoch.load(Ordering::Relaxed)
+    }
+
+    /// Check if a slot has expired.
+    #[inline]
+    fn is_expired(&self, state: &MapInner, bucket_idx: usize, slot_idx: u8) -> bool {
+        let ttl = self.ttl_epochs.load(Ordering::Relaxed);
+        if ttl == 0 {
+            return false;
+        }
+        let epoch = self.current_epoch.load(Ordering::Relaxed);
+        let slot_epoch = state.epochs.lock().unwrap()[bucket_idx * 4 + slot_idx as usize];
+        epoch.wrapping_sub(slot_epoch) > ttl
+    }
+
+    /// Stamp the current epoch onto a slot.
+    #[inline]
+    fn stamp_epoch(&self, state: &MapInner, bucket_idx: usize, slot_idx: u8) {
+        let epoch = self.current_epoch.load(Ordering::Relaxed);
+        state.epochs.lock().unwrap()[bucket_idx * 4 + slot_idx as usize] = epoch;
     }
 
     /// Thread-safe insert. Takes `&self` — no `&mut` required.
@@ -219,6 +270,9 @@ impl<K: PulseKey, V: PulseValue> ConcurrentPulseMap<K, V> {
                 self.resize(num_bkts * 2);
             }
         }
+
+        // Advance epoch on every insert
+        self.current_epoch.fetch_add(1, Ordering::Relaxed);
 
         let kb = key.to_bytes();
         let vb = value.to_bytes();
@@ -241,16 +295,21 @@ impl<K: PulseKey, V: PulseValue> ConcurrentPulseMap<K, V> {
             let slot_idx = m.trailing_zeros() as u8;
             m &= m - 1;
             let slot = &bucket.slots[slot_idx as usize];
-            if slot.matches_key(key_bytes, &hr) {
+            if slot.matches_key(key_bytes, &hr, &state.slab_pool.lock().unwrap()) {
+                // Free old slab entry if in slab mode
+                if slot.get_mode() == 1 {
+                    state.slab_pool.lock().unwrap().free(slot.slab_idx());
+                }
                 let s = &mut bucket.slots[slot_idx as usize];
                 if key_bytes.len() <= 6 && val_bytes.len() <= 7 {
                     s.set_inline(key_bytes, val_bytes);
                 } else {
-                    let mut slab = state.slab_pool.lock().unwrap();
-                    let slab_ref = slab.alloc(key_bytes, val_bytes);
-                    s.set_slab(hr.ext_fp_hi, hr.ext_fp, slab_ref);
+                    let idx = state.slab_pool.lock().unwrap().alloc(key_bytes, val_bytes);
+                    s.set_slab(hr.ext_fp_hi, hr.ext_fp, idx);
                 }
                 bucket.meta.on_access(slot_idx);
+                // Refresh epoch on update
+                self.stamp_epoch(&state, idx, slot_idx);
                 return;
             }
         }
@@ -259,6 +318,11 @@ impl<K: PulseKey, V: PulseValue> ConcurrentPulseMap<K, V> {
         let (target_slot, is_eviction) = if let Some(free) = bucket.meta.find_free_slot() {
             (free, false)
         } else if let Some(evict) = bucket.meta.find_evict_target() {
+            // Free slab memory on eviction
+            let old_slot = &bucket.slots[evict as usize];
+            if old_slot.get_mode() == 1 {
+                state.slab_pool.lock().unwrap().free(old_slot.slab_idx());
+            }
             self.eviction_count.fetch_add(1, Ordering::Relaxed);
             (evict, true)
         } else {
@@ -270,14 +334,16 @@ impl<K: PulseKey, V: PulseValue> ConcurrentPulseMap<K, V> {
         if key_bytes.len() <= 6 && val_bytes.len() <= 7 {
             slot.set_inline(key_bytes, val_bytes);
         } else {
-            let mut slab = state.slab_pool.lock().unwrap();
-            let slab_ref = slab.alloc(key_bytes, val_bytes);
-            slot.set_slab(hr.ext_fp_hi, hr.ext_fp, slab_ref);
+            let idx = state.slab_pool.lock().unwrap().alloc(key_bytes, val_bytes);
+            slot.set_slab(hr.ext_fp_hi, hr.ext_fp, idx);
         }
 
         bucket.meta.set_state(target_slot, SlotState::Full);
         bucket.meta.set_h2(target_slot, hr.h2);
         bucket.meta.on_insert(target_slot);
+
+        // Stamp epoch for TTL
+        self.stamp_epoch(&state, idx, target_slot);
 
         if !is_eviction {
             self.count.fetch_add(1, Ordering::Relaxed);
@@ -303,10 +369,16 @@ impl<K: PulseKey, V: PulseValue> ConcurrentPulseMap<K, V> {
             let slot_idx = m.trailing_zeros() as u8;
             m &= m - 1;
             let slot = &bucket.slots[slot_idx as usize];
-            if slot.matches_key(key_bytes, &hr) {
+            let slab = state.slab_pool.lock().unwrap();
+            if slot.matches_key(key_bytes, &hr, &slab) {
+                // Check TTL expiry
+                if self.is_expired(&state, idx, slot_idx) {
+                    return None;
+                }
                 bucket.meta.on_access(slot_idx);
-                let val_bytes = slot.get_value(&hr);
-                return V::from_bytes(val_bytes);
+                let val_bytes = slot.get_value(&slab).to_vec();
+                drop(slab);
+                return V::from_bytes(&val_bytes);
             }
         }
         None
@@ -325,17 +397,22 @@ impl<K: PulseKey, V: PulseValue> ConcurrentPulseMap<K, V> {
 
         let bucket = unsafe { &*state.buckets[idx].get() };
 
-        for slot_idx in 0..4u8 {
-            if bucket.meta.get_state(slot_idx) != SlotState::Full {
-                continue;
-            }
-            if bucket.meta.get_h2(slot_idx) != hr.h2 {
-                continue;
-            }
+        // Use match_mask — same branchless path as get()
+        let mask = bucket.meta.match_mask(hr.h2);
+        let mut m = mask;
+        while m != 0 {
+            let slot_idx = m.trailing_zeros() as u8;
+            m &= m - 1;
             let slot = &bucket.slots[slot_idx as usize];
-            if slot.matches_key(key_bytes, &hr) {
-                let val_bytes = slot.get_value(&hr);
-                return V::from_bytes(val_bytes);
+            let slab = state.slab_pool.lock().unwrap();
+            if slot.matches_key(key_bytes, &hr, &slab) {
+                // Check TTL expiry
+                if self.is_expired(&state, idx, slot_idx) {
+                    return None;
+                }
+                let val_bytes = slot.get_value(&slab).to_vec();
+                drop(slab);
+                return V::from_bytes(&val_bytes);
             }
         }
         None
@@ -360,15 +437,18 @@ impl<K: PulseKey, V: PulseValue> ConcurrentPulseMap<K, V> {
 
         let bucket = unsafe { &mut *state.buckets[idx].get() };
 
-        for slot_idx in 0..4u8 {
-            if bucket.meta.get_state(slot_idx) != SlotState::Full {
-                continue;
-            }
-            if bucket.meta.get_h2(slot_idx) != hr.h2 {
-                continue;
-            }
+        // Use match_mask — same branchless path as get()
+        let mask = bucket.meta.match_mask(hr.h2);
+        let mut m = mask;
+        while m != 0 {
+            let slot_idx = m.trailing_zeros() as u8;
+            m &= m - 1;
             let slot = &bucket.slots[slot_idx as usize];
-            if slot.matches_key(key_bytes, &hr) {
+            if slot.matches_key(key_bytes, &hr, &state.slab_pool.lock().unwrap()) {
+                // Free slab memory on remove
+                if slot.get_mode() == 1 {
+                    state.slab_pool.lock().unwrap().free(slot.slab_idx());
+                }
                 bucket.meta.set_state(slot_idx, SlotState::Tombstone);
                 bucket.slots[slot_idx as usize].clear();
                 self.count.fetch_sub(1, Ordering::Relaxed);
@@ -419,26 +499,28 @@ impl<K: PulseKey, V: PulseValue> ConcurrentPulseMap<K, V> {
 
                 // Extract key and value bytes from the slot
                 let _hr_from_h2 = bucket.meta.get_h2(slot_idx);
-                let key_bytes = slot.get_key_bytes();
-                let val_bytes = slot.get_value_bytes();
+                let slab = state.slab_pool.lock().unwrap();
+                let key_bytes = slot.get_key_bytes(&slab).to_vec();
+                let val_bytes = slot.get_value_bytes(&slab).to_vec();
+                drop(slab);
 
                 if key_bytes.is_empty() {
                     continue;
                 }
 
                 // Rehash into new bucket
-                let hr = compute_hash(key_bytes);
+                let hr = compute_hash(&key_bytes);
                 let new_idx = (hr.h1 as usize) & new_mask;
                 let new_bucket = unsafe { &mut *new_buckets[new_idx].get() };
 
                 if let Some(free) = new_bucket.meta.find_free_slot() {
                     let new_slot = &mut new_bucket.slots[free as usize];
                     if key_bytes.len() <= 6 && val_bytes.len() <= 7 {
-                        new_slot.set_inline(key_bytes, val_bytes);
+                        new_slot.set_inline(&key_bytes, &val_bytes);
                     } else {
                         let mut slab = new_slab.lock().unwrap();
-                        let slab_ref = slab.alloc(key_bytes, val_bytes);
-                        new_slot.set_slab(hr.ext_fp_hi, hr.ext_fp, slab_ref);
+                        let idx = slab.alloc(&key_bytes, &val_bytes);
+                        new_slot.set_slab(hr.ext_fp_hi, hr.ext_fp, idx);
                     }
                     new_bucket.meta.set_state(free, SlotState::Full);
                     new_bucket.meta.set_h2(free, hr.h2);
@@ -455,6 +537,8 @@ impl<K: PulseKey, V: PulseValue> ConcurrentPulseMap<K, V> {
         state.slab_pool = new_slab;
         state.num_buckets = new_actual;
         state.bucket_mask = new_mask;
+        // Rebuild epochs for new bucket count (all fresh — old epochs are no longer valid)
+        *state.epochs.lock().unwrap() = vec![0u32; new_actual * 4];
 
         // Update count to actual rehashed entries
         self.count.store(new_count, Ordering::Relaxed);

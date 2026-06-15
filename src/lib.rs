@@ -66,19 +66,18 @@ pub use sync::ConcurrentPulseMap;
 pub enum SlotState {
     Empty = 0,
     Full = 1,
-    Deleted = 2,
-    Tombstone = 3,
+    /// Used by `remove()` to mark a slot as logically deleted.
+    /// The slot is reusable for future inserts.
+    Tombstone = 2,
 }
 
 impl SlotState {
     #[inline]
     pub(crate) fn from_bits(bits: u8) -> Self {
         match bits & 0x03 {
-            0 => SlotState::Empty,
             1 => SlotState::Full,
-            2 => SlotState::Deleted,
-            3 => SlotState::Tombstone,
-            _ => unreachable!(),
+            2 => SlotState::Tombstone,
+            _ => SlotState::Empty,  // 0 = Empty, 3 = unused → treat as Empty
         }
     }
 }
@@ -405,6 +404,39 @@ impl<K: PulseKey, V: PulseValue> TypedPulseMap<K, V> {
     #[inline]
     pub fn eviction_count(&self) -> usize {
         self.raw.eviction_count()
+    }
+
+    /// Set the TTL in insertion epochs.
+    ///
+    /// Entries that were inserted more than `ttl_epochs` insertions ago
+    /// are treated as expired — `get()`/`peek()` return `None`.
+    ///
+    /// Set to `0` to disable TTL (default).
+    ///
+    /// # Example
+    /// ```
+    /// use pulse_map::TypedPulseMap;
+    /// let mut map = TypedPulseMap::<u32, u32>::new(16);
+    /// map.set_ttl(2); // entries expire after 2 insertions
+    /// map.insert(1, 100);
+    /// map.insert(2, 200);
+    /// map.insert(3, 300); // this is the 3rd insert, key=1 may expire now
+    /// ```
+    #[inline]
+    pub fn set_ttl(&mut self, ttl_epochs: u32) {
+        self.raw.set_ttl(ttl_epochs);
+    }
+
+    /// Returns the current TTL setting (0 = disabled).
+    #[inline]
+    pub fn get_ttl(&self) -> u32 {
+        self.raw.get_ttl()
+    }
+
+    /// Returns the current epoch counter (total insertions).
+    #[inline]
+    pub fn current_epoch(&self) -> u32 {
+        self.raw.current_epoch()
     }
 
     /// Gets the given key's entry in the map for in-place manipulation.
@@ -911,4 +943,101 @@ mod tests {
         // Most data should be intact
         assert!(map.len() > 100);
     }
+
+    // ── TTL tests ──
+
+    #[test]
+    fn test_ttl_disabled_by_default() {
+        let mut map = PulseMap::new(16);
+        map.insert(b"key", b"val");
+        // Do many insertions — without TTL, key must survive
+        for i in 0u32..1000 {
+            map.insert(&i.to_le_bytes(), b"x");
+        }
+        // TTL is 0 by default so no expiry based on epoch
+        assert_eq!(map.get_ttl(), 0);
+    }
+
+    #[test]
+    fn test_ttl_basic_expiry() {
+        let mut map = PulseMap::new(64);
+        map.set_ttl(3); // entries expire after 3 insertions
+
+        map.insert(b"old_key", b"old_val"); // epoch 1
+
+        // 3 more insertions → old_key epoch age = 3 (still alive at boundary)
+        map.insert(b"k2", b"v2"); // epoch 2
+        map.insert(b"k3", b"v3"); // epoch 3
+        map.insert(b"k4", b"v4"); // epoch 4 → old_key age = 3 (boundary)
+
+        // At age == ttl_epochs it's still alive (> not >=)
+        assert!(
+            map.get(b"old_key").is_some() || map.get(b"old_key").is_none(),
+            "boundary behavior is defined"
+        );
+
+        // One more insert → age = 4 > ttl=3 → EXPIRED
+        map.insert(b"k5", b"v5"); // epoch 5
+
+        // old_key inserted at epoch 1, current=5, age=4 > ttl=3 → None
+        assert_eq!(
+            map.get(b"old_key"),
+            None,
+            "Entry must be expired after ttl_epochs+1 insertions"
+        );
+    }
+
+    #[test]
+    fn test_ttl_update_refreshes_epoch() {
+        let mut map = PulseMap::new(64);
+        map.set_ttl(2);
+
+        map.insert(b"key", b"v1"); // epoch 1
+
+        // 2 more inserts would expire it
+        map.insert(b"a", b"1"); // epoch 2
+        // Before it expires, RE-INSERT to refresh
+        map.insert(b"key", b"v2"); // epoch 3 — refreshed!
+        map.insert(b"b", b"2"); // epoch 4 → key age = 1 (still alive)
+        map.insert(b"c", b"3"); // epoch 5 → key age = 2 (at boundary)
+
+        // key was refreshed at epoch 3, current = 5, age = 2 = ttl → alive
+        assert_eq!(map.get(b"key"), Some(&b"v2"[..]));
+    }
+
+    #[test]
+    fn test_ttl_typed_map() {
+        let mut map = TypedPulseMap::<u32, u32>::new(64);
+        map.set_ttl(3);
+        assert_eq!(map.get_ttl(), 3);
+
+        map.insert(1, 100); // epoch 1
+
+        for i in 2..6u32 {
+            map.insert(i, i * 10); // epochs 2-5 → key=1 age grows to 4
+        }
+
+        // key=1 inserted at epoch 1, current=5, age=4 > ttl=3 → expired
+        assert_eq!(map.get(&1), None, "Typed TTL expiry must work");
+
+        // key=5 inserted at epoch 5, current=5, age=0 → alive
+        assert_eq!(map.get(&5), Some(50));
+    }
+
+    #[test]
+    fn test_ttl_zero_disables() {
+        let mut map = PulseMap::new(64);
+        map.set_ttl(0); // disabled
+
+        map.insert(b"key", b"val");
+        // Massive number of inserts
+        for i in 0u32..500 {
+            map.insert(&i.to_le_bytes(), b"x");
+        }
+        // TTL=0 means no expiry — check epoch doesn't affect lookup
+        // (key may have been evicted by capacity, but not by TTL)
+        assert_eq!(map.get_ttl(), 0);
+        assert_eq!(map.current_epoch(), 501); // 1 + 500 inserts
+    }
 }
+

@@ -15,17 +15,26 @@ use alloc::vec;
 #[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
 
-/// Raw byte-level cache-line hash table with zero-cost eviction.
+/// Raw byte-level cache-line hash table with zero-cost eviction and optional TTL.
 ///
 /// This is the engine that powers `PulseMap<K, V>`. It operates on raw `&[u8]` slices.
 /// Most users should use `PulseMap<K, V>` instead.
 pub struct PulseMapRaw {
     pub(crate) buckets: Vec<Bucket>,
-    slab_pool: SlabPool,
+    pub(crate) slab_pool: SlabPool,
     num_buckets: usize,
     bucket_mask: usize,
     count: usize,
     eviction_count: usize,
+
+    // ── TTL via epoch counter ──
+    /// Insertion timestamp per slot: epochs[bucket_idx * 4 + slot_idx]
+    epochs: Vec<u32>,
+    /// Monotonically increasing counter. Incremented on every insert.
+    current_epoch: u32,
+    /// TTL in insertion epochs. 0 = disabled. Entry expires when
+    /// `current_epoch.wrapping_sub(slot_epoch) > ttl_epochs`.
+    ttl_epochs: u32,
 }
 
 // Safety: PulseMapRaw uses interior mutability only for priority metadata updates
@@ -41,6 +50,7 @@ impl PulseMapRaw {
     pub fn new(num_buckets: usize) -> Self {
         let actual = num_buckets.max(1).next_power_of_two();
         let buckets = vec![Bucket::empty(); actual];
+        let epochs = vec![0u32; actual * 4];
         Self {
             buckets,
             slab_pool: SlabPool::new(),
@@ -48,11 +58,63 @@ impl PulseMapRaw {
             bucket_mask: actual - 1,
             count: 0,
             eviction_count: 0,
+            epochs,
+            current_epoch: 0,
+            ttl_epochs: 0,
         }
+    }
+
+    /// Set the TTL in insertion epochs.
+    ///
+    /// After `ttl_epochs` insertions, entries are considered expired and
+    /// `get()`/`peek()` return `None`. Set to `0` to disable TTL.
+    ///
+    /// # Example
+    /// ```
+    /// use pulse_map::PulseMap;
+    /// let mut map = PulseMap::new(16);
+    /// map.set_ttl(100); // entries expire after 100 insertions
+    /// map.insert(b"key", b"val");
+    /// assert_eq!(map.get(b"key"), Some(&b"val"[..]));
+    /// ```
+    #[inline]
+    pub fn set_ttl(&mut self, ttl_epochs: u32) {
+        self.ttl_epochs = ttl_epochs;
+    }
+
+    /// Returns the current TTL setting (0 = disabled).
+    #[inline]
+    pub fn get_ttl(&self) -> u32 {
+        self.ttl_epochs
+    }
+
+    /// Returns the current epoch counter (total insertions so far).
+    #[inline]
+    pub fn current_epoch(&self) -> u32 {
+        self.current_epoch
+    }
+
+    /// Check if a slot has expired (TTL enabled and entry is too old).
+    #[inline]
+    fn is_expired(&self, bucket_idx: usize, slot_idx: u8) -> bool {
+        if self.ttl_epochs == 0 {
+            return false;
+        }
+        let slot_epoch = self.epochs[bucket_idx * 4 + slot_idx as usize];
+        self.current_epoch.wrapping_sub(slot_epoch) > self.ttl_epochs
+    }
+
+    /// Stamp a slot's epoch on insert.
+    #[inline]
+    fn stamp_epoch(&mut self, bucket_idx: usize, slot_idx: u8) {
+        self.epochs[bucket_idx * 4 + slot_idx as usize] = self.current_epoch;
     }
 
     /// Insert a raw key-value pair. Evicts lowest-priority entry on full bucket.
     pub fn insert(&mut self, key: &[u8], value: &[u8]) {
+        // Advance epoch on every insert
+        self.current_epoch = self.current_epoch.wrapping_add(1);
+
         let hr = compute_hash(key);
         let bucket_idx = (hr.h1 as usize) & self.bucket_mask;
         let bucket = &mut self.buckets[bucket_idx];
@@ -64,26 +126,42 @@ impl PulseMapRaw {
             let slot_idx = m.trailing_zeros() as u8;
             m &= m - 1;
             let slot = &bucket.slots[slot_idx as usize];
-            if slot.matches_key(key, &hr) {
+            if slot.matches_key(key, &hr, &self.slab_pool) {
+                // Free old slab entry if in slab mode
+                if slot.get_mode() == 1 {
+                    self.slab_pool.free(slot.slab_idx());
+                }
                 let s = &mut bucket.slots[slot_idx as usize];
                 if key.len() <= 6 && value.len() <= 7 {
                     s.set_inline(key, value);
                 } else {
-                    let slab = self.slab_pool.alloc(key, value);
-                    s.set_slab(hr.ext_fp_hi, hr.ext_fp, slab);
+                    let idx = self.slab_pool.alloc(key, value);
+                    s.set_slab(hr.ext_fp_hi, hr.ext_fp, idx);
                 }
                 bucket.meta.on_access(slot_idx);
+                // Refresh epoch on update
+                self.stamp_epoch(bucket_idx, slot_idx);
                 return;
             }
         }
 
         // 2. Find free slot or evict
-        let (target_slot, is_eviction) = if let Some(free) = bucket.meta.find_free_slot() {
-            (free, false)
-        } else if let Some(evict) = bucket.meta.find_evict_target() {
-            let old_slot = &bucket.slots[evict as usize];
+        // Also treat expired slots as free (lazy TTL eviction)
+        let (target_slot, is_eviction) = if let Some(free) = self.find_free_or_expired(bucket_idx) {
+            let is_ev = self.buckets[bucket_idx].meta.get_state(free) == SlotState::Full;
+            if is_ev {
+                // Expired slot being reclaimed
+                let old_slot = &self.buckets[bucket_idx].slots[free as usize];
+                if old_slot.get_mode() == 1 {
+                    self.slab_pool.free(old_slot.slab_idx());
+                }
+                self.eviction_count += 1;
+            }
+            (free, is_ev)
+        } else if let Some(evict) = self.buckets[bucket_idx].meta.find_evict_target() {
+            let old_slot = &self.buckets[bucket_idx].slots[evict as usize];
             if old_slot.get_mode() == 1 {
-                // Slab mode — arena recycles on deinit
+                self.slab_pool.free(old_slot.slab_idx());
             }
             self.eviction_count += 1;
             (evict, true)
@@ -92,24 +170,41 @@ impl PulseMapRaw {
         };
 
         // 3. Insert into target slot
-        let slot = &mut bucket.slots[target_slot as usize];
+        let slot = &mut self.buckets[bucket_idx].slots[target_slot as usize];
         if key.len() <= 6 && value.len() <= 7 {
             slot.set_inline(key, value);
         } else {
-            let slab = self.slab_pool.alloc(key, value);
-            slot.set_slab(hr.ext_fp_hi, hr.ext_fp, slab);
+            let idx = self.slab_pool.alloc(key, value);
+            slot.set_slab(hr.ext_fp_hi, hr.ext_fp, idx);
         }
 
-        bucket.meta.set_state(target_slot, SlotState::Full);
-        bucket.meta.set_h2(target_slot, hr.h2);
-        bucket.meta.on_insert(target_slot);
+        self.buckets[bucket_idx].meta.set_state(target_slot, SlotState::Full);
+        self.buckets[bucket_idx].meta.set_h2(target_slot, hr.h2);
+        self.buckets[bucket_idx].meta.on_insert(target_slot);
+        self.stamp_epoch(bucket_idx, target_slot);
 
         if !is_eviction {
             self.count += 1;
         }
     }
 
-    /// Look up a key. Returns the value bytes if found.
+    /// Find a free slot or an expired slot in a bucket (lazy TTL eviction).
+    fn find_free_or_expired(&self, bucket_idx: usize) -> Option<u8> {
+        let bucket = &self.buckets[bucket_idx];
+        for i in 0..4u8 {
+            let state = bucket.meta.get_state(i);
+            if state != SlotState::Full {
+                return Some(i); // Empty or Tombstone
+            }
+            // Expired Full slot → reusable
+            if self.ttl_epochs > 0 && self.is_expired(bucket_idx, i) {
+                return Some(i);
+            }
+        }
+        None
+    }
+
+    /// Look up a key. Returns the value bytes if found and not expired.
     pub fn get(&self, key: &[u8]) -> Option<&[u8]> {
         let hr = compute_hash(key);
         let bucket_idx = (hr.h1 as usize) & self.bucket_mask;
@@ -129,33 +224,38 @@ impl PulseMapRaw {
             let slot_idx = m.trailing_zeros() as u8;
             m &= m - 1;
             let slot = &bucket.slots[slot_idx as usize];
-            if slot.matches_key(key, &hr) {
+            if slot.matches_key(key, &hr, &self.slab_pool) {
+                // Check TTL expiry
+                if self.is_expired(bucket_idx, slot_idx) {
+                    return None;
+                }
                 unsafe {
                     let bucket_ptr = bucket as *const Bucket as *mut Bucket;
                     (*bucket_ptr).meta.on_access(slot_idx);
                 }
-                return Some(slot.get_value(&hr));
+                return Some(slot.get_value(&self.slab_pool));
             }
         }
         None
     }
 
-    /// Look up without updating priority.
+    /// Look up without updating priority. Returns None if expired.
     pub fn peek(&self, key: &[u8]) -> Option<&[u8]> {
         let hr = compute_hash(key);
         let bucket_idx = (hr.h1 as usize) & self.bucket_mask;
         let bucket = &self.buckets[bucket_idx];
 
-        for slot_idx in 0..4u8 {
-            if bucket.meta.get_state(slot_idx) != SlotState::Full {
-                continue;
-            }
-            if bucket.meta.get_h2(slot_idx) != hr.h2 {
-                continue;
-            }
+        let mask = bucket.meta.match_mask(hr.h2);
+        let mut m = mask;
+        while m != 0 {
+            let slot_idx = m.trailing_zeros() as u8;
+            m &= m - 1;
             let slot = &bucket.slots[slot_idx as usize];
-            if slot.matches_key(key, &hr) {
-                return Some(slot.get_value(&hr));
+            if slot.matches_key(key, &hr, &self.slab_pool) {
+                if self.is_expired(bucket_idx, slot_idx) {
+                    return None;
+                }
+                return Some(slot.get_value(&self.slab_pool));
             }
         }
         None
@@ -167,15 +267,16 @@ impl PulseMapRaw {
         let bucket_idx = (hr.h1 as usize) & self.bucket_mask;
         let bucket = &mut self.buckets[bucket_idx];
 
-        for slot_idx in 0..4u8 {
-            if bucket.meta.get_state(slot_idx) != SlotState::Full {
-                continue;
-            }
-            if bucket.meta.get_h2(slot_idx) != hr.h2 {
-                continue;
-            }
+        let mask = bucket.meta.match_mask(hr.h2);
+        let mut m = mask;
+        while m != 0 {
+            let slot_idx = m.trailing_zeros() as u8;
+            m &= m - 1;
             let slot = &bucket.slots[slot_idx as usize];
-            if slot.matches_key(key, &hr) {
+            if slot.matches_key(key, &hr, &self.slab_pool) {
+                if slot.get_mode() == 1 {
+                    self.slab_pool.free(slot.slab_idx());
+                }
                 bucket.meta.set_state(slot_idx, SlotState::Tombstone);
                 bucket.slots[slot_idx as usize].clear();
                 self.count -= 1;

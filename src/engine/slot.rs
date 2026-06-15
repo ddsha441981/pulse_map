@@ -18,7 +18,7 @@
 //! ```
 
 use crate::engine::hash::HashResult;
-use crate::engine::slab::SlabEntry;
+use crate::engine::slab::SlabPool;
 
 /// 14-byte slot that stores either inline key+value or a slab pointer.
 #[derive(Clone, Copy)]
@@ -90,8 +90,9 @@ impl Slot {
     // ── Slab mode ──
 
     /// Set slab pointer with extended fingerprint.
+    /// `slab_idx` is the index returned by `SlabPool::alloc()`.
     #[inline]
-    pub fn set_slab(&mut self, ext_fp_hi: u8, ext_fp: u32, slab_ptr: *const SlabEntry) {
+    pub fn set_slab(&mut self, ext_fp_hi: u8, ext_fp: u32, slab_idx: usize) {
         self.data = [0u8; 14];
         // header: mode=1, ext_fp_hi in bits 0-6
         self.data[0] = 0x80 | (ext_fp_hi & 0x7F);
@@ -99,23 +100,16 @@ impl Slot {
         self.data[1..5].copy_from_slice(&ext_fp.to_le_bytes());
         // flags at byte 5
         self.data[5] = 0;
-        // slab_ptr at bytes 6..14
-        let ptr_bytes = (slab_ptr as u64).to_le_bytes();
-        self.data[6..14].copy_from_slice(&ptr_bytes);
+        // slab index at bytes 6..14 (u64)
+        self.data[6..14].copy_from_slice(&(slab_idx as u64).to_le_bytes());
     }
 
-    /// Get slab pointer.
+    /// Get slab index stored in this slot.
     #[inline]
-    fn slab_ptr(&self) -> *const SlabEntry {
+    pub fn slab_idx(&self) -> usize {
         let mut bytes = [0u8; 8];
         bytes.copy_from_slice(&self.data[6..14]);
-        u64::from_le_bytes(bytes) as *const SlabEntry
-    }
-
-    /// Get slab entry reference.
-    #[inline]
-    fn slab_entry(&self) -> &SlabEntry {
-        unsafe { &*self.slab_ptr() }
+        u64::from_le_bytes(bytes) as usize
     }
 
     /// Get ext_fp from slab slot.
@@ -134,13 +128,14 @@ impl Slot {
 
     /// Get the key from a slab-mode slot.
     #[inline]
-    pub fn slab_key(&self) -> &[u8] {
-        self.slab_entry().key()
+    pub fn slab_key<'a>(&self, pool: &'a SlabPool) -> &'a [u8] {
+        pool.get(self.slab_idx()).key()
     }
 
     /// Check if this slot's key matches the given key.
-    #[inline]
-    pub fn matches_key(&self, key: &[u8], hr: &HashResult) -> bool {
+    /// Requires `pool` for slab mode key lookup.
+    #[inline(always)]
+    pub fn matches_key(&self, key: &[u8], hr: &HashResult, pool: &SlabPool) -> bool {
         if self.get_mode() == 0 {
             // Inline: direct comparison
             self.inline_key() == key
@@ -149,40 +144,49 @@ impl Slot {
             if self.get_ext_fp_hi() != hr.ext_fp_hi || self.get_ext_fp() != hr.ext_fp {
                 return false;
             }
-            let entry = self.slab_entry();
-            entry.key() == key
+            pool.get(self.slab_idx()).key() == key
         }
     }
 
     /// Get the value from this slot.
-    #[inline]
-    pub fn get_value(&self, _hr: &HashResult) -> &[u8] {
+    /// Inline mode: borrows from self. Slab mode: borrows from pool.
+    #[inline(always)]
+    pub fn get_value<'s, 'p>(&'s self, pool: &'p SlabPool) -> &'p [u8]
+    where
+        's: 'p,
+    {
         if self.get_mode() == 0 {
             self.inline_value()
         } else {
-            self.slab_entry().value()
+            pool.get(self.slab_idx()).value()
         }
     }
 
     /// Get key bytes from this slot (inline or slab).
     /// Used by resize/rehash operations.
     #[inline]
-    pub fn get_key_bytes(&self) -> &[u8] {
+    pub fn get_key_bytes<'s, 'p>(&'s self, pool: &'p SlabPool) -> &'p [u8]
+    where
+        's: 'p,
+    {
         if self.get_mode() == 0 {
             self.inline_key()
         } else {
-            self.slab_entry().key()
+            pool.get(self.slab_idx()).key()
         }
     }
 
     /// Get value bytes from this slot (inline or slab).
     /// Used by resize/rehash operations.
     #[inline]
-    pub fn get_value_bytes(&self) -> &[u8] {
+    pub fn get_value_bytes<'s, 'p>(&'s self, pool: &'p SlabPool) -> &'p [u8]
+    where
+        's: 'p,
+    {
         if self.get_mode() == 0 {
             self.inline_value()
         } else {
-            self.slab_entry().value()
+            pool.get(self.slab_idx()).value()
         }
     }
 }

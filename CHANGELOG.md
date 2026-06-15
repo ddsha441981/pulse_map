@@ -310,12 +310,86 @@ Implementing `Index` would require either:
 
 ---
 
-## [v0.6.0] — Planned
+## [v0.6.0] — 2026-06-16
 
-### 🚀 Performance + Publishing
+### ⚡ Performance + Memory + TTL
 
-- [ ] Publish `pulse_map` to crates.io
-- [ ] Publish `pulse-map` to PyPI
-- [ ] Publish `pulse-map` to npm
-- [ ] TTL (time-to-live) expiration
-- [ ] Async support (tokio)
+Algorithmic fixes, memory correctness, and a new TTL feature.
+
+### Added
+
+**TTL via Epoch Counter (`raw.rs`)**
+- `set_ttl(n: u32)` — entries expire after `n` insertions (0 = disabled)
+- `get_ttl() → u32` — query current TTL setting
+- `current_epoch() → u32` — total insertions so far
+- Zero overhead when TTL is disabled (`ttl_epochs == 0` → single compare, skipped)
+- Re-inserting a key refreshes its epoch (extends lifetime)
+- Expired slots lazily reclaimed on next insert — no background thread needed
+- Available on both `PulseMap` (raw) and `TypedPulseMap<K,V>`
+
+```rust
+let mut cache = PulseMap::new(1024);
+cache.set_ttl(500);             // entries expire after 500 insertions
+cache.insert(b"session", b"abc123");
+// ...500 inserts later...
+assert_eq!(cache.get(b"session"), None); // expired ✓
+```
+
+**Slab Free List (`engine/slab.rs`)**
+- `SlabPool` now uses `Vec<Option<Box<SlabEntry>>>` + `free_list: Vec<usize>`
+- Evicted slab entries returned to free list via `free(idx)` — reused on next alloc
+- `SlabEntry::rewrite()` — in-place key/value rewrite (realloc only if new data is larger)
+- **Fixes memory leak**: previously, evicted slab entries were abandoned until map dropped
+- High-churn workloads (e.g., DNS cache, session store) now have stable memory
+
+**Slot Layout Change (pointer → index)**
+- Slab slots now store `usize` index into `SlabPool` (bytes 6–13)
+- Previously stored raw `*const SlabEntry` pointer
+- Enables free list: `raw.rs` calls `slab_pool.free(slot.slab_idx())` on eviction
+- `slab_idx()` method replaces old `slab_ptr()`
+
+### Changed
+
+**`peek()` + `remove()` now use `match_mask()` (`raw.rs`, `sync.rs`)**
+- Previously used brute-force per-slot loop: 8 individual `get_state()` + `get_h2()` calls
+- Now identical to `get()`: single branchless `match_mask(h2)` bit operation
+- Consistent hot path across all 3 lookup functions
+
+**`SlotState::Deleted` removed (`lib.rs`)**
+- Variant was never written — only `Tombstone` is set by `remove()`
+- `Deleted = 2, Tombstone = 3` → `Tombstone = 2` (simpler encoding)
+- `find_free_slot()` simplified from 3-way OR to single `!= Full` check
+- `from_bits()` updated accordingly
+
+### Fixed
+
+- **Memory leak on eviction**: slab entries now returned to free list instead of abandoned
+- **Slab memory on `remove()`**: `slab_pool.free(idx)` called on explicit key removal
+- **Slab memory on update**: old slab entry freed before allocating new one
+
+### Testing
+
+- **57 tests passing** (up from 50)
+- 4 new slab free list tests (reuse, larger rewrite, bulk reuse)
+- 5 new TTL tests (basic expiry, update refresh, typed map, zero disables, epoch counter)
+
+### Benchmarks (v0.6.0) — Stable Run
+
+| Benchmark (100K ops) | v0.5.0 | v0.6.0 | Note |
+|---|:---:|:---:|:---:|
+| raw_lookup | 7.22 ms | ~7.2 ms | No change (expected) |
+| raw_mixed | 17.46 ms | **16.0 ms** | ✅ -8% (remove() faster) |
+| raw_eviction | 1.10 ms | ~1.10 ms | No change (expected) |
+| **lru_lookup** | 3.40 ms | 3.40 ms | Benchmark reference |
+
+> **Note:** TTL and slab free list are correctness/memory fixes, not raw speed improvements.
+> The -8% mixed improvement comes from `remove()` using `match_mask()` instead of brute-force.
+
+### Known Remaining Gap
+
+```
+PulseMap lookup: ~7ms
+lru lookup:      ~3.4ms
+Gap: ~2x — structural (lru stores typed values directly, PulseMap stores bytes)
+Closing this gap requires changing core storage model → v0.7.0 scope
+```

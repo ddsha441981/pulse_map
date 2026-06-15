@@ -115,12 +115,11 @@ impl MetaWord {
         mask
     }
 
-    /// Find a free slot (Empty or Deleted or Tombstone).
+    /// Find a free slot (Empty or Tombstone — any non-Full state).
     #[inline]
     pub fn find_free_slot(&self) -> Option<u8> {
         for i in 0..4u8 {
-            let s = self.get_state(i);
-            if s == SlotState::Empty || s == SlotState::Deleted || s == SlotState::Tombstone {
+            if self.get_state(i) != SlotState::Full {
                 return Some(i);
             }
         }

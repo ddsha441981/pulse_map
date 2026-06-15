@@ -35,10 +35,10 @@
             const path_to_root = "";
             const default_light_theme = "navy";
             const default_dark_theme = "rust";
-            window.path_to_searchindex_js = "searchindex-3071a43b.js";
+            window.path_to_searchindex_js = "searchindex-504b7fc9.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-d005dbd8.js"></script>
+        <script src="toc-0be18d89.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -181,48 +181,44 @@
                 <div id="mdbook-content" class="content">
                     <main>
                         <h1 id="performance--benchmarks"><a class="header" href="#performance--benchmarks">Performance &amp; Benchmarks</a></h1>
-<h2 id="benchmark-results-amd-ryzen-7-5800x-linux-6x"><a class="header" href="#benchmark-results-amd-ryzen-7-5800x-linux-6x">Benchmark Results (AMD Ryzen 7 5800X, Linux 6.x)</a></h2>
-<h3 id="single-threaded-throughput"><a class="header" href="#single-threaded-throughput">Single-Threaded Throughput</a></h3>
+<blockquote>
+<p>Results from v0.6.0 · Criterion · Linux · i7-8650U</p>
+</blockquote>
+<h2 id="pulsemap-vs-lru-crate-same-category--bounded-cache"><a class="header" href="#pulsemap-vs-lru-crate-same-category--bounded-cache">PulseMap vs <code>lru</code> crate (same category — bounded cache)</a></h2>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Operation</th><th style="text-align: center">Entries</th><th style="text-align: center">PulseMap</th><th style="text-align: center">HashMap</th><th style="text-align: center">Speedup</th></tr>
+<tr><th>Benchmark (100K ops)</th><th style="text-align: center">PulseMap</th><th style="text-align: center"><code>lru</code> crate</th><th style="text-align: center">Result</th></tr>
 </thead>
 <tbody>
-<tr><td>Insert</td><td style="text-align: center">10K</td><td style="text-align: center">4.2ns/op</td><td style="text-align: center">18ns/op</td><td style="text-align: center"><strong>4.3×</strong></td></tr>
-<tr><td>Get (hit)</td><td style="text-align: center">10K</td><td style="text-align: center">3.8ns/op</td><td style="text-align: center">12ns/op</td><td style="text-align: center"><strong>3.2×</strong></td></tr>
-<tr><td>Get (miss)</td><td style="text-align: center">10K</td><td style="text-align: center">2.1ns/op</td><td style="text-align: center">8ns/op</td><td style="text-align: center"><strong>3.8×</strong></td></tr>
-<tr><td>Remove</td><td style="text-align: center">10K</td><td style="text-align: center">3.9ns/op</td><td style="text-align: center">15ns/op</td><td style="text-align: center"><strong>3.8×</strong></td></tr>
-<tr><td>Mixed (50/50)</td><td style="text-align: center">10K</td><td style="text-align: center">4.0ns/op</td><td style="text-align: center">15ns/op</td><td style="text-align: center"><strong>3.7×</strong></td></tr>
+<tr><td><strong>INSERT</strong></td><td style="text-align: center"><strong>13.8 ms</strong></td><td style="text-align: center">19.1 ms</td><td style="text-align: center">✅ <strong>1.4x faster</strong></td></tr>
+<tr><td><strong>MIXED (insert+lookup)</strong></td><td style="text-align: center"><strong>16.0 ms</strong></td><td style="text-align: center">23.7 ms</td><td style="text-align: center">✅ <strong>1.5x faster</strong></td></tr>
+<tr><td><strong>EVICTION (50K)</strong></td><td style="text-align: center"><strong>1.5 ms</strong></td><td style="text-align: center">2.2 ms</td><td style="text-align: center">✅ <strong>1.5x faster</strong></td></tr>
+<tr><td>LOOKUP</td><td style="text-align: center">9.8 ms</td><td style="text-align: center"><strong>5.4 ms</strong></td><td style="text-align: center">lru 1.8x faster</td></tr>
 </tbody>
 </table>
 </div>
-<h3 id="concurrent-throughput-8-threads"><a class="header" href="#concurrent-throughput-8-threads">Concurrent Throughput (8 threads)</a></h3>
+<blockquote>
+<p><strong>Why is lookup slower?</strong> <code>lru</code> stores typed values as native pointers. PulseMap stores serialized
+bytes — enabling <code>no_std</code>, multi-language bindings, and a stable memory layout.
+Closing this gap is the v0.7.0 roadmap item.</p>
+</blockquote>
+<h2 id="v050--v060-improvement"><a class="header" href="#v050--v060-improvement">v0.5.0 → v0.6.0 Improvement</a></h2>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Operation</th><th style="text-align: center">PulseMap</th><th style="text-align: center">DashMap</th><th style="text-align: center">Speedup</th></tr>
+<tr><th>Benchmark</th><th style="text-align: center">v0.5.0</th><th style="text-align: center">v0.6.0</th><th style="text-align: center">Delta</th></tr>
 </thead>
 <tbody>
-<tr><td>Insert</td><td style="text-align: center">12M ops/s</td><td style="text-align: center">8M ops/s</td><td style="text-align: center"><strong>1.5×</strong></td></tr>
-<tr><td>Get</td><td style="text-align: center">45M ops/s</td><td style="text-align: center">35M ops/s</td><td style="text-align: center"><strong>1.3×</strong></td></tr>
-<tr><td>Mixed (80R/20W)</td><td style="text-align: center">38M ops/s</td><td style="text-align: center">28M ops/s</td><td style="text-align: center"><strong>1.4×</strong></td></tr>
+<tr><td>raw_mixed_100k</td><td style="text-align: center">17.46 ms</td><td style="text-align: center"><strong>16.0 ms</strong></td><td style="text-align: center">✅ -8%</td></tr>
+<tr><td>raw_eviction_50k</td><td style="text-align: center">1.10 ms</td><td style="text-align: center">1.10 ms</td><td style="text-align: center">no change</td></tr>
+<tr><td>raw_lookup_100k</td><td style="text-align: center">7.22 ms</td><td style="text-align: center">7.22 ms</td><td style="text-align: center">no change</td></tr>
 </tbody>
 </table>
 </div>
-<h3 id="eviction-workload"><a class="header" href="#eviction-workload">Eviction Workload</a></h3>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Scenario</th><th style="text-align: center">PulseMap</th><th style="text-align: center">LRU Crate</th><th style="text-align: center">Speedup</th></tr>
-</thead>
-<tbody>
-<tr><td>Insert beyond capacity</td><td style="text-align: center">5.1ns/op</td><td style="text-align: center">7.8ns/op</td><td style="text-align: center"><strong>1.5×</strong></td></tr>
-<tr><td>Hot-cold (80/20 Zipf)</td><td style="text-align: center">93% hit rate</td><td style="text-align: center">91% hit rate</td><td style="text-align: center"><strong>+2% hits</strong></td></tr>
-</tbody>
-</table>
-</div>
-<h3 id="memory-efficiency"><a class="header" href="#memory-efficiency">Memory Efficiency</a></h3>
+<p>The -8% mixed improvement comes from <code>remove()</code> now using <code>match_mask()</code> (branchless)
+instead of the old 8-call per-slot brute-force loop.</p>
+<h2 id="memory-efficiency"><a class="header" href="#memory-efficiency">Memory Efficiency</a></h2>
 <div class="table-wrapper">
 <table>
 <thead>

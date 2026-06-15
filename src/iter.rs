@@ -6,7 +6,6 @@
 //! - `RawIter` — iterates over `(&[u8], &[u8])` raw key-value pairs
 //! - `TypedIter` — iterates over `(K, V)` deserialized pairs
 
-use crate::engine::hash::HashResult;
 use crate::raw::PulseMapRaw;
 use crate::{PulseKey, PulseValue, SlotState};
 
@@ -42,21 +41,14 @@ impl<'a> Iterator for RawIter<'a> {
 
                 if bucket.meta.get_state(idx) == SlotState::Full {
                     let slot = &bucket.slots[idx as usize];
-                    // Create a dummy HashResult for get_value — only mode check matters
-                    let hr = HashResult {
-                        h1: 0,
-                        h2: 0,
-                        ext_fp_hi: 0,
-                        ext_fp: 0,
-                    };
 
                     let key = if slot.get_mode() == 0 {
                         slot.inline_key()
                     } else {
-                        slot.slab_key()
+                        slot.slab_key(&self.map.slab_pool)
                     };
 
-                    let value = slot.get_value(&hr);
+                    let value = slot.get_value(&self.map.slab_pool);
                     return Some((key, value));
                 }
             }

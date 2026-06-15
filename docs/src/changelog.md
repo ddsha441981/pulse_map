@@ -2,7 +2,30 @@
 
 See the full [CHANGELOG.md](https://github.com/ddsha441981/pulse_map/blob/main/CHANGELOG.md) in the repository root.
 
+## v0.6.0 (2026-06-16)
+
+### Added
+- **TTL via epoch counter** — `set_ttl(n)` expires entries after `n` insertions
+- `get_ttl()`, `current_epoch()` — query TTL state
+- **Slab free list** — evicted slab entries reused instead of leaked
+- `SlabEntry::rewrite()` — in-place rewrite on free-list reuse
+
+### Changed
+- `peek()` + `remove()` now use `match_mask()` — same branchless path as `get()`
+- `SlotState::Deleted` removed — was never written, `Tombstone` is now value `2`
+- `find_free_slot()` simplified to `!= Full` check
+
+### Fixed
+- **Memory leak**: slab entries on eviction/remove now returned to free list
+- Slot layout: slab slots store `usize` index instead of raw `*const SlabEntry`
+
+### Tests
+- **57 tests** (up from 50)
+
+---
+
 ## v0.5.0 (2026-05-26)
+
 
 ### Added
 - **Multi-language FFI bindings** — C, Python (PyO3), Java (Panama FFM), Node.js (napi-rs)

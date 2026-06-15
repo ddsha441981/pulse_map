@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>TypedPulseMap&lt;K, V&gt; - PulseMap — The Complete Guide</title>
+        <title>TTL — Automatic Expiry - PulseMap — The Complete Guide</title>
 
 
         <!-- Custom HTML head -->
@@ -146,7 +146,7 @@
                         <a href="https://github.com/ddsha441981/pulse_map" title="Git repository" aria-label="Git repository">
                             <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
                         </a>
-                        <a href="https://github.com/ddsha441981/pulse_map/edit/main/docs/src/api-typed.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                        <a href="https://github.com/ddsha441981/pulse_map/edit/main/docs/src/ttl.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
                             <span class=fa-svg id="git-edit-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M421.7 220.3l-11.3 11.3-22.6 22.6-205 205c-6.6 6.6-14.8 11.5-23.8 14.1L30.8 511c-8.4 2.5-17.5 .2-23.7-6.1S-1.5 489.7 1 481.2L38.7 353.1c2.6-9 7.5-17.2 14.1-23.8l205-205 22.6-22.6 11.3-11.3 33.9 33.9 62.1 62.1 33.9 33.9zM96 353.9l-9.3 9.3c-.9 .9-1.6 2.1-2 3.4l-25.3 86 86-25.3c1.3-.4 2.5-1.1 3.4-2l9.3-9.3H112c-8.8 0-16-7.2-16-16V353.9zM453.3 19.3l39.4 39.4c25 25 25 65.5 0 90.5l-14.5 14.5-22.6 22.6-11.3 11.3-33.9-33.9-62.1-62.1L314.3 67.7l11.3-11.3 22.6-22.6 14.5-14.5c25-25 65.5-25 90.5 0z"/></svg></span>
                         </a>
 
@@ -180,77 +180,178 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="typedpulsemapk-v"><a class="header" href="#typedpulsemapk-v">TypedPulseMap&lt;K, V&gt;</a></h1>
-<p>Type-safe single-threaded map. Works with any type implementing <code>PulseKey</code> and <code>PulseValue</code>.</p>
-<h2 id="construction"><a class="header" href="#construction">Construction</a></h2>
+                        <h1 id="ttl--automatic-expiry"><a class="header" href="#ttl--automatic-expiry">TTL — Automatic Expiry</a></h1>
+<blockquote>
+<p>Added in <strong>v0.6.0</strong></p>
+</blockquote>
+<p>PulseMap supports <strong>insertion-epoch TTL</strong> — entries automatically expire after a fixed number of insertions. No background thread, no timer, zero overhead when disabled.</p>
+<hr>
+<h2 id="how-it-works"><a class="header" href="#how-it-works">How It Works</a></h2>
+<p>Every insert bumps a monotonic <code>current_epoch: u32</code> counter. Each slot stores the epoch at which its entry was inserted (<code>slot_epoch</code>). On every <code>get()</code> or <code>peek()</code>, if TTL is enabled:</p>
+<pre><code>age = current_epoch - slot_epoch
+if age &gt; ttl_epochs → entry is expired → return None
+</code></pre>
+<p>This is a <strong>single wrapping subtraction + comparison</strong> — effectively free on modern CPUs.</p>
+<hr>
+<h2 id="quick-start"><a class="header" href="#quick-start">Quick Start</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use pulse_map::PulseMap;
+
+let mut cache = PulseMap::new(1024);
+
+// Set TTL: entries expire after 500 insertions
+cache.set_ttl(500);
+
+cache.insert(b"session:abc", b"user_data");  // epoch 1
+
+// High-traffic server: 500 more inserts
+for i in 0u32..501 {
+    cache.insert(&amp;i.to_le_bytes(), b"traffic");
+}
+
+// session:abc was inserted at epoch 1
+// current_epoch is now 502, age = 501 &gt; ttl = 500
+assert_eq!(cache.get(b"session:abc"), None);  // expired ✓
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="api"><a class="header" href="#api">API</a></h2>
+<h3 id="pulsemap-raw-u8"><a class="header" href="#pulsemap-raw-u8">PulseMap (raw <code>&amp;[u8]</code>)</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>map.set_ttl(n: u32)      // set TTL in insertion epochs (0 = disabled)
+map.get_ttl() -&gt; u32     // query current TTL setting
+map.current_epoch() -&gt; u32  // total insertions so far
+<span class="boring">}</span></code></pre>
+<h3 id="typedpulsemapk-v"><a class="header" href="#typedpulsemapk-v">TypedPulseMap&lt;K, V&gt;</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>map.set_ttl(500u32);
+map.get_ttl()       // → 500
+map.current_epoch() // → total inserts
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="ttl--0--disabled-default"><a class="header" href="#ttl--0--disabled-default">TTL = 0 → Disabled (Default)</a></h2>
+<p>By default, <code>ttl_epochs = 0</code>. The expiry check is:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>if self.ttl_epochs == 0 {
+    return false;  // short-circuit: zero overhead
+}
+<span class="boring">}</span></code></pre>
+<p><strong>Backward compatible</strong> — existing code works without any changes.</p>
+<hr>
+<h2 id="update-refreshes-epoch"><a class="header" href="#update-refreshes-epoch">Update Refreshes Epoch</a></h2>
+<p>Re-inserting the same key resets its epoch to <code>current_epoch</code>:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>cache.set_ttl(3);
+
+cache.insert(b"key", b"v1");  // epoch 1
+cache.insert(b"a",   b"x");   // epoch 2
+cache.insert(b"b",   b"y");   // epoch 3
+
+// key's age is now 2, about to expire...
+// Re-insert before it expires:
+cache.insert(b"key", b"v2");  // epoch 4 — refreshed!
+
+cache.insert(b"c", b"z");     // epoch 5 → key age = 1 (alive)
+assert_eq!(cache.get(b"key"), Some(&amp;b"v2"[..]));
+<span class="boring">}</span></code></pre>
+<p>This is useful for <strong>session stores</strong> — each access or heartbeat refreshes the TTL.</p>
+<hr>
+<h2 id="lazy-eviction"><a class="header" href="#lazy-eviction">Lazy Eviction</a></h2>
+<p>Expired slots are <strong>not eagerly removed</strong>. They are reclaimed lazily:</p>
+<ol>
+<li><code>get()</code> / <code>peek()</code> — returns <code>None</code> for expired entries (no cleanup)</li>
+<li><code>insert()</code> — when searching for a free slot, expired slots are treated as available</li>
+</ol>
+<p>This means <strong>no background thread, no periodic scan, no latency spikes</strong>.</p>
+<pre><code>Expired slot detected during insert → reuse it immediately
+No extra memory cost, no timer interrupt
+</code></pre>
+<hr>
+<h2 id="choosing-a-ttl-value"><a class="header" href="#choosing-a-ttl-value">Choosing a TTL Value</a></h2>
+<p>TTL is measured in <strong>insertions</strong>, not wall-clock time. To convert:</p>
+<pre><code>ttl_epochs = expected_inserts_per_second × desired_ttl_seconds
+
+Example:
+  Server: 10,000 inserts/sec
+  Desired TTL: 60 seconds
+  → set_ttl(600_000)
+</code></pre>
+<p>This makes TTL workload-proportional — a busier server expires entries faster, which is often the desired behavior for rate limiters and caches.</p>
+<hr>
+<h2 id="typedpulsemap-example"><a class="header" href="#typedpulsemap-example">TypedPulseMap Example</a></h2>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>use pulse_map::TypedPulseMap;
 
-// String → String cache
-let mut cache: TypedPulseMap&lt;String, String&gt; = TypedPulseMap::new(256);
+let mut sessions = TypedPulseMap::&lt;String, String&gt;::new(1024);
+sessions.set_ttl(10_000); // expire after 10K inserts
 
-// u64 → u64 counter store
-let mut counters: TypedPulseMap&lt;u64, u64&gt; = TypedPulseMap::new(1024);
+sessions.insert("user:42".to_string(), "token_abc".to_string());
 
-// With auto-resize
-let mut cache: TypedPulseMap&lt;String, Vec&lt;u8&gt;&gt; = TypedPulseMap::with_auto_resize(64);
+// ... much later, after 10K+ inserts ...
+
+assert_eq!(sessions.get(&amp;"user:42".to_string()), None); // expired
 <span class="boring">}</span></code></pre>
-<h2 id="crud-operations"><a class="header" href="#crud-operations">CRUD Operations</a></h2>
+<hr>
+<h2 id="epoch-counter-overflow"><a class="header" href="#epoch-counter-overflow">Epoch Counter Overflow</a></h2>
+<p><code>current_epoch</code> is a <code>u32</code> — max value is <code>4,294,967,295</code> (4.3 billion inserts).</p>
+<p>At 1 million inserts/sec, it wraps after ~71 minutes. The expiry check uses <strong>wrapping subtraction</strong> (<code>wrapping_sub</code>) so wrap-around is handled correctly without panicking.</p>
+<hr>
+<h2 id="comparison-with-redis-ttl"><a class="header" href="#comparison-with-redis-ttl">Comparison with Redis TTL</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Feature</th><th style="text-align: center">Redis TTL</th><th style="text-align: center">PulseMap TTL</th></tr>
+</thead>
+<tbody>
+<tr><td>Time unit</td><td style="text-align: center">Seconds / milliseconds</td><td style="text-align: center">Insertions</td></tr>
+<tr><td>Background expiry</td><td style="text-align: center">✅ Yes</td><td style="text-align: center">❌ Lazy only</td></tr>
+<tr><td>Refresh on access</td><td style="text-align: center">Manual (<code>EXPIRE</code> cmd)</td><td style="text-align: center">Re-insert</td></tr>
+<tr><td>Network hop</td><td style="text-align: center">~100μs</td><td style="text-align: center">0 (in-process)</td></tr>
+<tr><td>Memory bound</td><td style="text-align: center">No</td><td style="text-align: center">✅ Fixed</td></tr>
+<tr><td>No GC pauses</td><td style="text-align: center">❌ No</td><td style="text-align: center">✅ Yes</td></tr>
+</tbody>
+</table>
+</div>
+<blockquote>
+<p>PulseMap TTL is ideal for <strong>in-process</strong> hot caches. Use Redis when you need cross-process TTL or millisecond precision.</p>
+</blockquote>
+<hr>
+<h2 id="implementation-details"><a class="header" href="#implementation-details">Implementation Details</a></h2>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>// Insert
-cache.insert("session_abc".to_string(), "user_data_json".to_string());
+</span>// PulseMapRaw fields (raw.rs)
+epochs: Vec&lt;u32&gt;,      // one per slot: epochs[bucket_idx * 4 + slot_idx]
+current_epoch: u32,    // global counter, wrapping
+ttl_epochs: u32,       // 0 = disabled
 
-// Get — returns owned Option&lt;V&gt;
-let val: Option&lt;String&gt; = cache.get(&amp;"session_abc".to_string());
+// On every insert:
+self.current_epoch = self.current_epoch.wrapping_add(1);
+self.epochs[bucket_idx * 4 + slot_idx] = self.current_epoch;
 
-// Peek — like get() but doesn't update eviction priority
-let val: Option&lt;String&gt; = cache.peek(&amp;"session_abc".to_string());
-
-// Contains
-let exists: bool = cache.contains_key(&amp;"session_abc".to_string());
-
-// Remove
-let removed: bool = cache.remove(&amp;"session_abc".to_string());
+// On get():
+fn is_expired(&amp;self, bucket_idx: usize, slot_idx: u8) -&gt; bool {
+    if self.ttl_epochs == 0 { return false; }
+    let slot_epoch = self.epochs[bucket_idx * 4 + slot_idx as usize];
+    self.current_epoch.wrapping_sub(slot_epoch) &gt; self.ttl_epochs
+}
 <span class="boring">}</span></code></pre>
-<h2 id="numeric-keys"><a class="header" href="#numeric-keys">Numeric Keys</a></h2>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>let mut map: TypedPulseMap&lt;u32, u64&gt; = TypedPulseMap::new(256);
-
-map.insert(42, 100);
-map.insert(1337, 9001);
-
-assert_eq!(map.get(&amp;42), Some(100));
-<span class="boring">}</span></code></pre>
-<h2 id="stats"><a class="header" href="#stats">Stats</a></h2>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>println!("Entries:     {}", cache.len());
-println!("Empty:       {}", cache.is_empty());
-println!("Capacity:    {}", cache.capacity());
-println!("Load Factor: {:.1}%", cache.load_factor() * 100.0);
-println!("Evictions:   {}", cache.eviction_count());
-println!("Buckets:     {}", cache.num_buckets());
-<span class="boring">}</span></code></pre>
-<h2 id="performance-tips"><a class="header" href="#performance-tips">Performance Tips</a></h2>
-<ol>
-<li><strong>Use small keys</strong> (≤ 6 bytes) when possible — they stay inline (no heap allocation)</li>
-<li><strong>Use small values</strong> (≤ 7 bytes) when possible — same reason</li>
-<li><strong>Pre-size correctly</strong> — avoid auto-resize overhead for known workloads</li>
-<li><strong>Use <code>peek()</code> for read-heavy</strong> paths where you don’t want to affect eviction priority</li>
-</ol>
+<p>Memory overhead: <code>num_buckets × 4 × 4 bytes</code> (one <code>u32</code> per slot).
+For 1024 buckets: <code>1024 × 4 × 4 = 16 KB</code> — negligible.</p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="api-raw.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="eviction.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="api-concurrent.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="concurrency.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -260,11 +361,11 @@ println!("Buckets:     {}", cache.num_buckets());
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="api-raw.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="eviction.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="api-concurrent.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="concurrency.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

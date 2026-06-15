@@ -35,10 +35,10 @@
             const path_to_root = "";
             const default_light_theme = "navy";
             const default_dark_theme = "rust";
-            window.path_to_searchindex_js = "searchindex-3071a43b.js";
+            window.path_to_searchindex_js = "searchindex-504b7fc9.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-d005dbd8.js"></script>
+        <script src="toc-0be18d89.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -222,6 +222,20 @@ println!("Capacity:  {}", map.capacity());
 println!("Load:      {:.1}%", map.load_factor() * 100.0);
 println!("Evictions: {}", map.eviction_count());
 <span class="boring">}</span></code></pre>
+<h2 id="ttl-v060"><a class="header" href="#ttl-v060">TTL (v0.6.0+)</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Set TTL: entries expire after 500 insertions
+map.set_ttl(500);
+
+// Query state
+println!("TTL setting: {}", map.get_ttl());       // 500
+println!("Epoch:       {}", map.current_epoch()); // total inserts
+
+// Disable TTL
+map.set_ttl(0);
+<span class="boring">}</span></code></pre>
+<p>See the <a href="./ttl.html">TTL page</a> for full details.</p>
 <h2 id="when-to-use-pulsemapraw"><a class="header" href="#when-to-use-pulsemapraw">When to Use PulseMapRaw</a></h2>
 <ul>
 <li>You already have byte-serialized keys/values</li>

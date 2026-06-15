@@ -45,6 +45,22 @@ println!("Load:      {:.1}%", map.load_factor() * 100.0);
 println!("Evictions: {}", map.eviction_count());
 ```
 
+## TTL (v0.6.0+)
+
+```rust
+// Set TTL: entries expire after 500 insertions
+map.set_ttl(500);
+
+// Query state
+println!("TTL setting: {}", map.get_ttl());       // 500
+println!("Epoch:       {}", map.current_epoch()); // total inserts
+
+// Disable TTL
+map.set_ttl(0);
+```
+
+See the [TTL page](./ttl.md) for full details.
+
 ## When to Use PulseMapRaw
 
 - You already have byte-serialized keys/values
