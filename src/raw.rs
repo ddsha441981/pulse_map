@@ -178,7 +178,9 @@ impl PulseMapRaw {
             slot.set_slab(hr.ext_fp_hi, hr.ext_fp, idx);
         }
 
-        self.buckets[bucket_idx].meta.set_state(target_slot, SlotState::Full);
+        self.buckets[bucket_idx]
+            .meta
+            .set_state(target_slot, SlotState::Full);
         self.buckets[bucket_idx].meta.set_h2(target_slot, hr.h2);
         self.buckets[bucket_idx].meta.on_insert(target_slot);
         self.stamp_epoch(bucket_idx, target_slot);

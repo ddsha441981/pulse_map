@@ -217,7 +217,7 @@ fn std_lookup_100k(c: &mut Criterion) {
         b.iter(|| {
             let mut hits = 0u64;
             for i in 0u32..100_000 {
-                if map.get(&i).is_some() {
+                if map.contains_key(&i) {
                     hits += 1;
                 }
             }

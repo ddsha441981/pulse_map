@@ -118,12 +118,7 @@ impl MetaWord {
     /// Find a free slot (Empty or Tombstone — any non-Full state).
     #[inline]
     pub fn find_free_slot(&self) -> Option<u8> {
-        for i in 0..4u8 {
-            if self.get_state(i) != SlotState::Full {
-                return Some(i);
-            }
-        }
-        None
+        (0..4u8).find(|&i| self.get_state(i) != SlotState::Full)
     }
 
     /// Find the slot with the lowest priority among Full slots (eviction target).

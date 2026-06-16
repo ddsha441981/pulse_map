@@ -62,11 +62,7 @@ impl SlabEntry {
         }
         unsafe {
             core::ptr::copy_nonoverlapping(key.as_ptr(), self.data, key.len());
-            core::ptr::copy_nonoverlapping(
-                value.as_ptr(),
-                self.data.add(key.len()),
-                value.len(),
-            );
+            core::ptr::copy_nonoverlapping(value.as_ptr(), self.data.add(key.len()), value.len());
         }
         self.key_len = key.len() as u32;
         self.val_len = value.len() as u32;
@@ -217,4 +213,3 @@ mod tests {
         assert_eq!(pool.free_list.len(), 0, "free list must be empty");
     }
 }
-

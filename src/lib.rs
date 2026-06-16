@@ -77,7 +77,7 @@ impl SlotState {
         match bits & 0x03 {
             1 => SlotState::Full,
             2 => SlotState::Tombstone,
-            _ => SlotState::Empty,  // 0 = Empty, 3 = unused → treat as Empty
+            _ => SlotState::Empty, // 0 = Empty, 3 = unused → treat as Empty
         }
     }
 }
@@ -890,7 +890,7 @@ mod tests {
         for h in handles {
             h.join().unwrap();
         }
-        assert!(map.len() > 0);
+        assert!(!map.is_empty());
     }
 
     #[cfg(feature = "std")]
@@ -996,7 +996,7 @@ mod tests {
 
         // 2 more inserts would expire it
         map.insert(b"a", b"1"); // epoch 2
-        // Before it expires, RE-INSERT to refresh
+                                // Before it expires, RE-INSERT to refresh
         map.insert(b"key", b"v2"); // epoch 3 — refreshed!
         map.insert(b"b", b"2"); // epoch 4 → key age = 1 (still alive)
         map.insert(b"c", b"3"); // epoch 5 → key age = 2 (at boundary)
@@ -1040,4 +1040,3 @@ mod tests {
         assert_eq!(map.current_epoch(), 501); // 1 + 500 inserts
     }
 }
-
