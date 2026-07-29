@@ -101,6 +101,25 @@ fn pulse_typed_lookup_100k(c: &mut Criterion) {
     });
 }
 
+fn pulse_typed_string_lookup_100k(c: &mut Criterion) {
+    let mut map = TypedPulseMap::<String, u32>::new(38461);
+    let keys: Vec<String> = (0u32..100_000).map(|i| format!("key:{i:08}")).collect();
+    for (i, k) in keys.iter().enumerate() {
+        map.insert(k.clone(), i as u32);
+    }
+    c.bench_function("pulse_typed_string_lookup_100k", |b| {
+        b.iter(|| {
+            let mut hits = 0u64;
+            for k in &keys {
+                if map.get(k).is_some() {
+                    hits += 1;
+                }
+            }
+            black_box(hits)
+        });
+    });
+}
+
 fn pulse_typed_mixed_100k(c: &mut Criterion) {
     c.bench_function("pulse_typed_mixed_100k", |b| {
         b.iter(|| {
@@ -186,6 +205,127 @@ fn lru_eviction_50k(c: &mut Criterion) {
             let mut cache = LruCache::<u32, u32>::new(cap);
             for i in 0u32..50_000 {
                 cache.put(i, i * 2);
+            }
+            black_box(cache.len());
+        });
+    });
+}
+
+// ═══════════════════════════════════════
+// moka Benchmarks (real competitor — concurrent bounded cache)
+// ═══════════════════════════════════════
+
+fn moka_insert_100k(c: &mut Criterion) {
+    c.bench_function("moka_insert_100k", |b| {
+        b.iter(|| {
+            let cache: moka::sync::Cache<u32, u32> = moka::sync::Cache::new(154_000);
+            for i in 0u32..100_000 {
+                cache.insert(i, i * 2);
+            }
+            black_box(cache.entry_count());
+        });
+    });
+}
+
+fn moka_lookup_100k(c: &mut Criterion) {
+    let cache: moka::sync::Cache<u32, u32> = moka::sync::Cache::new(154_000);
+    for i in 0u32..100_000 {
+        cache.insert(i, i * 2);
+    }
+    cache.run_pending_tasks(); // flush write buffer before measuring reads
+    c.bench_function("moka_lookup_100k", |b| {
+        b.iter(|| {
+            let mut hits = 0u64;
+            for i in 0u32..100_000 {
+                if cache.get(&i).is_some() {
+                    hits += 1;
+                }
+            }
+            black_box(hits)
+        });
+    });
+}
+
+fn moka_mixed_100k(c: &mut Criterion) {
+    c.bench_function("moka_mixed_100k", |b| {
+        b.iter(|| {
+            let cache: moka::sync::Cache<u32, u32> = moka::sync::Cache::new(154_000);
+            for i in 0u32..100_000 {
+                cache.insert(i, i * 2);
+                if i > 0 {
+                    black_box(cache.get(&(i / 2)));
+                }
+            }
+        });
+    });
+}
+
+fn moka_eviction_50k(c: &mut Criterion) {
+    c.bench_function("moka_eviction_50k", |b| {
+        b.iter(|| {
+            let cache: moka::sync::Cache<u32, u32> = moka::sync::Cache::new(1024);
+            for i in 0u32..50_000 {
+                cache.insert(i, i * 2);
+            }
+            black_box(cache.entry_count());
+        });
+    });
+}
+
+// ═══════════════════════════════════════
+// quick_cache Benchmarks (real competitor — fast bounded cache)
+// ═══════════════════════════════════════
+
+fn quick_insert_100k(c: &mut Criterion) {
+    c.bench_function("quick_insert_100k", |b| {
+        b.iter(|| {
+            let cache: quick_cache::sync::Cache<u32, u32> = quick_cache::sync::Cache::new(154_000);
+            for i in 0u32..100_000 {
+                cache.insert(i, i * 2);
+            }
+            black_box(cache.len());
+        });
+    });
+}
+
+fn quick_lookup_100k(c: &mut Criterion) {
+    let cache: quick_cache::sync::Cache<u32, u32> = quick_cache::sync::Cache::new(154_000);
+    for i in 0u32..100_000 {
+        cache.insert(i, i * 2);
+    }
+    c.bench_function("quick_lookup_100k", |b| {
+        b.iter(|| {
+            let mut hits = 0u64;
+            for i in 0u32..100_000 {
+                if cache.get(&i).is_some() {
+                    hits += 1;
+                }
+            }
+            black_box(hits)
+        });
+    });
+}
+
+fn quick_mixed_100k(c: &mut Criterion) {
+    c.bench_function("quick_mixed_100k", |b| {
+        b.iter(|| {
+            let cache: quick_cache::sync::Cache<u32, u32> = quick_cache::sync::Cache::new(154_000);
+            for i in 0u32..100_000 {
+                cache.insert(i, i * 2);
+                if i > 0 {
+                    black_box(cache.get(&(i / 2)));
+                }
+            }
+        });
+    });
+}
+
+fn quick_eviction_50k(c: &mut Criterion) {
+    c.bench_function("quick_eviction_50k", |b| {
+        b.iter(|| {
+            let cache: quick_cache::sync::Cache<u32, u32> = quick_cache::sync::Cache::new(1024);
+            for i in 0u32..50_000 {
+                cache.insert(i, i * 2);
             }
             black_box(cache.len());
         });
@@ -358,6 +498,7 @@ criterion_group!(
     // PulseMap Typed
     pulse_typed_insert_100k,
     pulse_typed_lookup_100k,
+    pulse_typed_string_lookup_100k,
     pulse_typed_mixed_100k,
     pulse_typed_iterator,
     // LRU Cache (fair comparison)
@@ -365,6 +506,16 @@ criterion_group!(
     lru_lookup_100k,
     lru_mixed_100k,
     lru_eviction_50k,
+    // moka (real competitor)
+    moka_insert_100k,
+    moka_lookup_100k,
+    moka_mixed_100k,
+    moka_eviction_50k,
+    // quick_cache (real competitor)
+    quick_insert_100k,
+    quick_lookup_100k,
+    quick_mixed_100k,
+    quick_eviction_50k,
     // std::HashMap (reference)
     std_insert_100k,
     std_lookup_100k,

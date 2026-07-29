@@ -115,6 +115,17 @@ pub trait PulseKey: Sized {
     fn to_bytes(&self) -> Self::Bytes;
     /// Deserialize from bytes.
     fn from_bytes(bytes: &[u8]) -> Option<Self>;
+
+    /// Run `f` with a borrowed byte view of the key.
+    ///
+    /// Read paths (`get`, `peek`, `remove`, `contains_key`) use this instead of
+    /// `to_bytes()`. The default falls back to `to_bytes()`; heap-backed keys
+    /// (`String`, `Vec<u8>`) override it to borrow their bytes directly —
+    /// zero allocation per lookup.
+    #[inline]
+    fn with_key_bytes<R>(&self, f: impl FnOnce(&[u8]) -> R) -> R {
+        f(self.to_bytes().as_ref())
+    }
 }
 
 /// Trait for types that can be used as PulseMap values.
@@ -199,6 +210,10 @@ impl PulseKey for String {
     fn from_bytes(b: &[u8]) -> Option<Self> {
         core::str::from_utf8(b).ok().map(String::from)
     }
+    #[inline]
+    fn with_key_bytes<R>(&self, f: impl FnOnce(&[u8]) -> R) -> R {
+        f(self.as_bytes())
+    }
 }
 
 impl PulseKey for Vec<u8> {
@@ -209,6 +224,10 @@ impl PulseKey for Vec<u8> {
     fn from_bytes(b: &[u8]) -> Option<Self> {
         Some(b.to_vec())
     }
+    #[inline]
+    fn with_key_bytes<R>(&self, f: impl FnOnce(&[u8]) -> R) -> R {
+        f(self)
+    }
 }
 
 impl<const N: usize> PulseKey for [u8; N] {
@@ -218,6 +237,10 @@ impl<const N: usize> PulseKey for [u8; N] {
     }
     fn from_bytes(b: &[u8]) -> Option<Self> {
         b.try_into().ok()
+    }
+    #[inline]
+    fn with_key_bytes<R>(&self, f: impl FnOnce(&[u8]) -> R) -> R {
+        f(self)
     }
 }
 
@@ -354,26 +377,22 @@ impl<K: PulseKey, V: PulseValue> TypedPulseMap<K, V> {
 
     /// Look up a key. Returns the deserialized value if found.
     pub fn get(&self, key: &K) -> Option<V> {
-        let kb = key.to_bytes();
-        self.raw.get(kb.as_ref()).and_then(|vb| V::from_bytes(vb))
+        key.with_key_bytes(|kb| self.raw.get(kb).and_then(V::from_bytes))
     }
 
     /// Look up without updating priority.
     pub fn peek(&self, key: &K) -> Option<V> {
-        let kb = key.to_bytes();
-        self.raw.peek(kb.as_ref()).and_then(|vb| V::from_bytes(vb))
+        key.with_key_bytes(|kb| self.raw.peek(kb).and_then(V::from_bytes))
     }
 
     /// Remove a key.
     pub fn remove(&mut self, key: &K) -> bool {
-        let kb = key.to_bytes();
-        self.raw.remove(kb.as_ref())
+        key.with_key_bytes(|kb| self.raw.remove(kb))
     }
 
     /// Check if a key exists.
     pub fn contains_key(&self, key: &K) -> bool {
-        let kb = key.to_bytes();
-        self.raw.peek(kb.as_ref()).is_some()
+        key.with_key_bytes(|kb| self.raw.peek(kb).is_some())
     }
 
     /// Iterate over all (key, value) pairs.
