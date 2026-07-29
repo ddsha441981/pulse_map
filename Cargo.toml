@@ -25,6 +25,8 @@ simd = []
 criterion = { version = "0.5", features = ["html_reports"] }
 rand = "0.8"
 lru = "0.12"
+moka = { version = "0.12", features = ["sync"] }
+quick_cache = "0.6"
 
 [[bench]]
 name = "benchmark"
