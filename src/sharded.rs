@@ -80,6 +80,16 @@ impl<K: PulseKey, V: PulseValue> ShardedPulseMap<K, V> {
         self.shards[idx].insert(key, value);
     }
 
+    /// Thread-safe insert with a per-entry TTL override.
+    ///
+    /// - `ttl = 0`: use the map's default TTL
+    /// - `ttl = u32::MAX`: this entry never expires
+    /// - `ttl = N`: this entry expires after N insertions
+    pub fn insert_ttl(&self, key: K, value: V, ttl: u32) {
+        let idx = key.with_key_bytes(Self::shard_for);
+        self.shards[idx].insert_ttl(key, value, ttl);
+    }
+
     /// Thread-safe lookup (updates LFU+LRU priority).
     pub fn get(&self, key: &K) -> Option<V> {
         let idx = key.with_key_bytes(Self::shard_for);
