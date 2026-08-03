@@ -1,6 +1,6 @@
-# FFI & Language Bindings
+# FFI — C Bindings
 
-PulseMap provides native bindings for 4 languages via the [`pulse_map_bindings`](https://github.com/ddsha441981/pulse_map_bindings) repository.
+PulseMap exposes a stable C ABI via the `pulse_map_ffi` crate. This is the only supported language binding — other languages should call through this C layer.
 
 ## Architecture
 
@@ -9,99 +9,136 @@ PulseMap provides native bindings for 4 languages via the [`pulse_map_bindings`]
                     │  pulse_map (Rust)     │ ← crates.io
                     │  ConcurrentPulseMap   │
                     └──────────┬───────────┘
-                               │
-          ┌────────────────────┼────────────────────┐
-          │                    │                     │
-    ┌─────┴─────┐      ┌──────┴──────┐       ┌─────┴──────┐
-    │ pulse_map  │      │ pulse_map   │       │ pulse_map  │
-    │   _ffi     │      │   _py       │       │   _java    │
-    │  (cdylib)  │      │  (PyO3)     │       │  (cdylib)  │
-    └─────┬──────┘      └──────┬──────┘       └─────┬──────┘
-          │                    │                     │
-    ┌─────┴──────┐      ┌──────┴──────┐       ┌─────┴──────┐
-    │    C/C++   │      │   Python    │       │  Java 22+  │
-    │  .so/.dll  │      │   wheel     │       │  Panama    │
-    └────────────┘      └─────────────┘       └────────────┘
+                               │  Rust FFI (#[no_mangle])
+                    ┌──────────┴───────────┐
+                    │  pulse_map_ffi        │
+                    │  libpulse_map.so/.dll │
+                    └──────────┬───────────┘
+                               │  C header (pulse_map.h)
+                    ┌──────────┴───────────┐
+                    │  C / C++ consumers    │
+                    └───────────────────────┘
 ```
 
-## C FFI
+## Build
 
-Uses **opaque handle pattern** (`PulseMapHandle*`) for memory-safe C interop.
+```bash
+# Build the shared library
+cd pulse_map_ffi
+cargo build --release
+
+# Output:
+#   target/release/libpulse_map.so      (Linux)
+#   target/release/libpulse_map.dylib   (macOS)
+#   target/release/pulse_map.dll        (Windows)
+#   target/release/libpulse_map.a       (static)
+```
+
+## C API
+
+Uses an **opaque handle pattern** (`PulseMapHandle*`) — the Rust struct is never exposed directly to C.
 
 ```c
 #include "pulse_map.h"
 
-PulseMapHandle* map = pulse_map_new(1024);
-pulse_map_insert(map, key, key_len, val, val_len);
+int main(void) {
+    // Create — 1024 buckets = 4096 slot capacity
+    PulseMapHandle* map = pulse_map_new(1024);
+    if (!map) return 1;  // allocation failed
 
-uint8_t buf[4096];
-int32_t len = pulse_map_get(map, key, key_len, buf, sizeof(buf));
+    // Insert
+    const uint8_t key[] = "session:abc";
+    const uint8_t val[] = "user_data";
+    pulse_map_insert(map, key, sizeof(key)-1, val, sizeof(val)-1);
 
-pulse_map_free(map);  // MUST call — no GC!
+    // Get
+    uint8_t buf[4096];
+    int32_t len = pulse_map_get(map, key, sizeof(key)-1, buf, sizeof(buf));
+    if (len >= 0) {
+        printf("Found: %.*s\n", len, buf);
+    }
+
+    // Remove
+    int removed = pulse_map_remove(map, key, sizeof(key)-1);
+
+    // Stats
+    printf("Entries:   %zu\n", pulse_map_len(map));
+    printf("Evictions: %zu\n", pulse_map_eviction_count(map));
+
+    // Free — MUST call, no GC!
+    pulse_map_free(map);
+    return 0;
+}
 ```
 
-**Build:** Produces `.so` (Linux), `.dylib` (macOS), `.dll` (Windows) + `.a`/`.lib` static.
+## Full API Reference
 
-## Python (PyO3)
+```c
+// Lifecycle
+PulseMapHandle* pulse_map_new(size_t num_buckets);
+void            pulse_map_free(PulseMapHandle* map);
 
-Direct Rust struct exposed as Python class. **GC-safe** — PyO3 handles Drop automatically.
+// CRUD
+void    pulse_map_insert(PulseMapHandle* map,
+                         const uint8_t* key, size_t key_len,
+                         const uint8_t* val, size_t val_len);
 
-```python
-from pulse_map_py import PulseMap
+int32_t pulse_map_get(PulseMapHandle* map,
+                      const uint8_t* key, size_t key_len,
+                      uint8_t* out_buf, size_t out_len);
+// Returns: bytes written (≥0) on hit, -1 on miss, -2 if out_buf too small
 
-cache = PulseMap(1024)
-cache["hello"] = "world"       # __setitem__
-print(cache["hello"])          # __getitem__
-print("hello" in cache)        # __contains__
-del cache["hello"]             # __delitem__
-print(len(cache))              # __len__
+int     pulse_map_remove(PulseMapHandle* map,
+                         const uint8_t* key, size_t key_len);
+// Returns: 1 if removed, 0 if not found
+
+int     pulse_map_contains(PulseMapHandle* map,
+                            const uint8_t* key, size_t key_len);
+
+// Stats
+size_t  pulse_map_len(const PulseMapHandle* map);
+size_t  pulse_map_capacity(const PulseMapHandle* map);
+size_t  pulse_map_eviction_count(const PulseMapHandle* map);
+
+// TTL
+void     pulse_map_set_ttl(PulseMapHandle* map, uint32_t ttl_epochs);
+uint32_t pulse_map_get_ttl(const PulseMapHandle* map);
+uint32_t pulse_map_current_epoch(const PulseMapHandle* map);
 ```
-
-**Build:** `maturin develop` → installs into virtualenv.
-
-## Java 22+ (Panama FFM)
-
-Uses **Foreign Function & Memory API** (no JNI). `AutoCloseable` + `Cleaner` for memory safety.
-
-```java
-try (var cache = new PulseMap(1024)) {
-    cache.put("hello", "world");
-    String val = cache.get("hello");  // "world"
-}  // auto-close → frees native memory
-// Even if close() is missed, Cleaner GC will free it
-```
-
-**Requirements:** Java 22+, `--enable-native-access=ALL-UNNAMED`.
-
-## Node.js (napi-rs)
-
-Native addon via napi-rs. **GC-safe** — V8 handles Drop automatically.
-
-```javascript
-const { PulseMap } = require('pulse-map');
-
-const cache = new PulseMap(1024);
-cache.set('hello', 'world');
-console.log(cache.get('hello'));  // 'world'
-console.log(cache.size);         // 1
-```
-
-**Build:** `npx napi build --release` → produces `.node` file.
-
-## Memory Safety by Language
-
-| Language | Who frees? | Leak protection |
-|----------|-----------|:-:|
-| C | User calls `pulse_map_free()` | ❌ Manual |
-| Python | PyO3 Drop on GC | ✅ Automatic |
-| Java | `close()` + `Cleaner` fallback | ✅ Double safety |
-| Node.js | napi-rs Drop on GC | ✅ Automatic |
 
 ## Null Safety
 
-| Language | null key | null value | Behavior |
-|----------|:--------:|:----------:|----------|
-| C | ✅ No-op | ✅ No-op | All functions check `ptr.is_null()` |
-| Python | ✅ TypeError | ✅ TypeError | PyO3 rejects `None` as `&str` |
-| Java | ✅ NullPointerException | ✅ NullPointerException | Explicit checks |
-| Node.js | ✅ Error | ✅ Error | napi-rs rejects `null`/`undefined` |
+All functions check for null pointers before dereferencing:
+
+```c
+// Safe — pulse_map_free() is a no-op on NULL
+pulse_map_free(NULL);
+
+// Safe — pulse_map_insert() checks map != NULL
+pulse_map_insert(NULL, key, key_len, val, val_len);  // no-op
+
+// Safe — pulse_map_get() returns -1 on NULL map
+int32_t len = pulse_map_get(NULL, key, key_len, buf, sizeof(buf));  // -1
+```
+
+## Memory Model
+
+| Question | Answer |
+|----------|--------|
+| Who allocates? | `pulse_map_new()` — heap via Rust allocator |
+| Who frees? | **You** — call `pulse_map_free()` |
+| Thread-safe? | ✅ Yes — wraps `ConcurrentPulseMap` |
+| GC? | ❌ No — manual lifetime management |
+
+> **Critical:** Always call `pulse_map_free()` when done. Forgetting it leaks the entire map including slab pool.
+
+## Linking
+
+```makefile
+# Makefile example
+CFLAGS  = -I./pulse_map_ffi/include
+LDFLAGS = -L./target/release -lpulse_map -Wl,-rpath,./target/release
+
+your_app: main.c
+	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
+```

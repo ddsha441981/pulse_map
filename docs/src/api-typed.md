@@ -20,8 +20,12 @@ let mut cache: TypedPulseMap<String, Vec<u8>> = TypedPulseMap::with_auto_resize(
 ## CRUD Operations
 
 ```rust
-// Insert
+// Insert (uses global TTL)
 cache.insert("session_abc".to_string(), "user_data_json".to_string());
+
+// Insert with per-entry TTL (v0.6.1+)
+cache.insert_ttl("session_abc".to_string(), "user_data".to_string(), 200);
+cache.insert_ttl("config".to_string(), "val".to_string(), u32::MAX);  // never expire
 
 // Get — returns owned Option<V>
 let val: Option<String> = cache.get(&"session_abc".to_string());

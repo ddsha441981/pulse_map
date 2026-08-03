@@ -1,12 +1,13 @@
 # API Reference
 
-PulseMap provides three main types, each suited for different use cases:
+PulseMap provides four map types. Choose based on your concurrency requirements:
 
-| Type | Thread-Safe | Key/Value Types | When to Use |
-|------|:-----------:|:-:|:-:|
-| `PulseMapRaw` | ❌ | `[u8]` bytes | Maximum performance, raw byte access |
-| `TypedPulseMap<K, V>` | ❌ | Any `PulseKey`/`PulseValue` | Type-safe single-threaded |
-| `ConcurrentPulseMap<K, V>` | ✅ | Any `PulseKey`/`PulseValue` | Production concurrent cache |
+| Type | Threads | Key/Value | When to Use |
+|------|:-------:|:---------:|-------------|
+| `PulseMapRaw` | ❌ Single | `[u8]` bytes | Max perf, raw bytes, FFI |
+| `TypedPulseMap<K, V>` | ❌ Single | Any `PulseKey`/`PulseValue` | Type-safe single-threaded |
+| `ConcurrentPulseMap<K, V>` | ✅ 1–2T | Any `PulseKey`/`PulseValue` | Low-contention concurrent |
+| `ShardedPulseMap<K, V>` | ✅ **3+T** | Any `PulseKey`/`PulseValue` | **High-concurrency production** |
 
 ## Type Aliases
 
@@ -41,22 +42,24 @@ pub trait PulseValue: Clone {
 
 **Implemented for:** Same types as `PulseKey`.
 
-## Common Methods
+## Common Methods (all map types)
 
-All three map types share these methods:
+| Method | Description |
+|--------|-------------|
+| `new(num_buckets)` | Fixed-size map |
+| `insert(key, value)` | Insert or update (uses global TTL) |
+| `insert_ttl(key, value, ttl)` | Insert with per-entry TTL override *(v0.6.1+)* |
+| `get(&key)` | Lookup — updates eviction priority |
+| `peek(&key)` | Lookup — no priority update (pure read) |
+| `remove(&key)` | Delete, returns `bool` |
+| `contains_key(&key)` | Existence check |
+| `len()` | Number of live entries |
+| `is_empty()` | Check if empty |
+| `capacity()` | Total slot count |
+| `load_factor()` | `len / capacity` |
+| `eviction_count()` | Total evicted entries |
+| `set_ttl(n)` | Global TTL in insertion epochs |
+| `get_ttl()` | Current global TTL |
+| `current_epoch()` | Total insertions so far |
 
-| Method | Signature | Description |
-|--------|-----------|-------------|
-| `new()` | `fn new(num_buckets: usize) -> Self` | Fixed-size map |
-| `insert()` | `fn insert(key, value)` | Insert or update |
-| `get()` | `fn get(&key) -> Option<V>` | Lookup (updates eviction priority) |
-| `peek()` | `fn peek(&key) -> Option<V>` | Lookup (no priority update) |
-| `remove()` | `fn remove(&key) -> bool` | Delete entry |
-| `contains_key()` | `fn contains_key(&key) -> bool` | Existence check |
-| `len()` | `fn len() -> usize` | Number of entries |
-| `is_empty()` | `fn is_empty() -> bool` | Check if empty |
-| `capacity()` | `fn capacity() -> usize` | Total slot count |
-| `load_factor()` | `fn load_factor() -> f64` | `len / capacity` |
-| `eviction_count()` | `fn eviction_count() -> usize` | Total evictions |
-
-See sub-pages for type-specific APIs.
+See sub-pages for type-specific APIs and examples.
