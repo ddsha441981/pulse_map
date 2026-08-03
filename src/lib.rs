@@ -46,6 +46,8 @@ mod raw;
 #[cfg(all(target_arch = "x86_64", feature = "simd"))]
 mod simd;
 #[cfg(feature = "std")]
+mod sharded;
+#[cfg(feature = "std")]
 mod sync;
 mod traits;
 
@@ -55,6 +57,8 @@ pub use crate::engine::meta::MetaWord;
 pub use crate::engine::slot::Slot;
 pub use iter::{RawIter, TypedIter};
 pub use raw::PulseMapRaw;
+#[cfg(feature = "std")]
+pub use sharded::ShardedPulseMap;
 #[cfg(feature = "std")]
 pub use sync::ConcurrentPulseMap;
 
