@@ -1,30 +1,55 @@
 # Performance & Benchmarks
 
-> Results from v0.6.0 · Criterion · Linux · i7-8650U
+> Results from v0.6.1 · Criterion · Dell Latitude 7490 · i7-8650U · Linux
 
-## PulseMap vs `lru` crate (same category — bounded cache)
+## Single-Thread (100K ops)
 
-| Benchmark (100K ops) | PulseMap | `lru` crate | Result |
-|---------------------|:-------:|:-----------:|:------:|
-| **INSERT** | **13.8 ms** | 19.1 ms | ✅ **1.4x faster** |
-| **MIXED (insert+lookup)** | **16.0 ms** | 23.7 ms | ✅ **1.5x faster** |
-| **EVICTION (50K)** | **1.5 ms** | 2.2 ms | ✅ **1.5x faster** |
-| LOOKUP | 9.8 ms | **5.4 ms** | lru 1.8x faster |
+| Benchmark | PulseMap | `lru` | `quick_cache` | `moka` |
+|-----------|:-------:|:-----:|:-------------:|:------:|
+| **INSERT** | **6.1 ms** | 19.1 ms | 5.6 ms | 161 ms |
+| **LOOKUP** | 5.4 ms | 5.4 ms | **2.8 ms** | 40 ms |
+| **MIXED** | 10.9 ms | 23.7 ms | **8.4 ms** | 187 ms |
+| **EVICTION (50K)** | **1.9 ms** 🥇 | 2.3 ms | 3.3 ms | 55.5 ms |
 
-> **Why is lookup slower?** `lru` stores typed values as native pointers. PulseMap stores serialized
-> bytes — enabling `no_std`, multi-language bindings, and a stable memory layout.
-> Closing this gap is the v0.7.0 roadmap item.
+### Where PulseMap Wins
 
-## v0.5.0 → v0.6.0 Improvement
+**Eviction-heavy workloads** — PulseMap's core strength. Eviction metadata lives in the same 64-byte cache line as data slots, so eviction decisions cost zero additional cache misses.
 
-| Benchmark | v0.5.0 | v0.6.0 | Delta |
-|-----------|:------:|:------:|:-----:|
-| raw_mixed_100k | 17.46 ms | **16.0 ms** | ✅ -8% |
-| raw_eviction_50k | 1.10 ms | 1.10 ms | no change |
-| raw_lookup_100k | 7.22 ms | 7.22 ms | no change |
+- **1.7x faster** than quick_cache on eviction
+- **29x faster** than moka on eviction
+- **3.1x faster** than lru on insert
 
-The -8% mixed improvement comes from `remove()` now using `match_mask()` (branchless)
-instead of the old 8-call per-slot brute-force loop.
+### Where PulseMap Loses
+
+**Pure lookup** — PulseMap stores values as serialized bytes (enabling `no_std` + FFI bindings), which adds deserialization cost on read.
+
+- quick_cache lookup: **1.9x faster** than PulseMap
+- lru lookup: same speed (5.4 ms)
+
+## Multi-Thread — 4 Threads, 100K ops
+
+| Benchmark | ShardedPulseMap | ConcurrentPulseMap | `moka` |
+|-----------|:--------------:|:-----------------:|:------:|
+| **4T INSERT** | **8.8 ms** 🥇 | 20.2 ms | 104 ms |
+| **4T LOOKUP** | **9.0 ms** 🥇 | 35.0 ms | 21.1 ms |
+| **4T MIXED** | **15.9 ms** 🥇 | 46.6 ms | 197 ms |
+
+### ShardedPulseMap Advantage
+
+ShardedPulseMap uses 16 independent shards with separate locks. This eliminates the global RwLock bottleneck in ConcurrentPulseMap.
+
+- **2.3–3.9x faster** than ConcurrentPulseMap
+- **6.5–12x faster** than moka on concurrent workloads
+
+## vs std::HashMap (reference only)
+
+HashMap has no eviction — it's a different category entirely:
+
+| Benchmark (100K ops) | PulseMap | std::HashMap | Note |
+|---------------------|:-------:|:------------:|:----:|
+| INSERT | 6.1 ms | 2.5 ms | std has no eviction |
+| LOOKUP | 5.4 ms | 2.9 ms | std uses SIMD + native types |
+| EVICTION | **1.9 ms** | N/A | HashMap can't evict |
 
 ## Memory Efficiency
 
@@ -41,9 +66,11 @@ instead of the old 8-call per-slot brute-force loop.
 # All benchmarks
 cargo bench
 
-# Specific benchmark
+# Specific category
 cargo bench -- insert
-cargo bench -- concurrent
+cargo bench -- "4t"        # 4-thread benchmarks
+cargo bench -- moka        # moka comparison
+cargo bench -- sharded     # ShardedPulseMap only
 cargo bench -- eviction
 
 # With SIMD (x86_64 only)
@@ -78,7 +105,8 @@ valgrind --tool=cachegrind target/release/examples/basic
 
 | Scenario | Bottleneck | Mitigation |
 |----------|-----------|------------|
-| Many threads, same key | Bucket spinlock contention | Shard across multiple maps |
-| Resize during load | Stop-the-world pause | Pre-size correctly |
+| Many threads, same key | Bucket spinlock contention | Use `ShardedPulseMap` |
+| Resize during load | Stop-the-world pause | Use `ShardedPulseMap::resize_all()` |
 | Large keys (>6B) | Slab allocation | Use short keys when possible |
 | >4 entries/bucket | Eviction overhead | Increase bucket count |
+| Pure read workloads | Serialization cost | Accept trade-off for `no_std`/FFI |

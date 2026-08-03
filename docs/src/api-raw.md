@@ -48,7 +48,7 @@ println!("Evictions: {}", map.eviction_count());
 ## TTL (v0.6.0+)
 
 ```rust
-// Set TTL: entries expire after 500 insertions
+// Set global TTL: entries expire after 500 insertions
 map.set_ttl(500);
 
 // Query state
@@ -57,6 +57,15 @@ println!("Epoch:       {}", map.current_epoch()); // total inserts
 
 // Disable TTL
 map.set_ttl(0);
+```
+
+## Per-Entry TTL (v0.6.1+)
+
+```rust
+// Per-entry override
+map.insert_ttl(b"session", b"data", 50);      // expires after 50 inserts
+map.insert_ttl(b"config", b"val", u32::MAX);  // never expires
+map.insert(b"normal", b"val");                 // uses global TTL
 ```
 
 See the [TTL page](./ttl.md) for full details.

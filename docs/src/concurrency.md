@@ -1,6 +1,9 @@
 # Concurrency Model
 
-PulseMap uses a **two-level locking** scheme designed for maximum concurrent throughput.
+PulseMap offers two concurrent map implementations:
+
+- **ConcurrentPulseMap** — single map with per-bucket spinlocks (good for 1–2 threads)
+- **ShardedPulseMap** — 16 independent shards (optimal for 3+ threads, 2.4–3.1x faster)
 
 ## Lock Architecture
 
@@ -111,7 +114,38 @@ Resize uses a **stop-the-world** approach:
 
 ## Best Practices
 
-1. **Use `Arc<ConcurrentPulseMap>`** — never `Mutex<PulseMap>`
-2. **Pre-size for known workloads** — avoids resize pauses
-3. **Use `peek()` for read-heavy paths** — avoids spinlock on eviction metadata update
-4. **Monitor `eviction_count()`** — high eviction = undersized map
+1. **Use `ShardedPulseMap` for 3+ threads** — 2.4–3.1x faster than ConcurrentPulseMap
+2. **Use `Arc<ShardedPulseMap>` or `Arc<ConcurrentPulseMap>`** — never `Mutex<PulseMap>`
+3. **Pre-size for known workloads** — avoids resize pauses
+4. **Use `peek()` for read-heavy paths** — avoids spinlock on eviction metadata update
+5. **Monitor `eviction_count()`** — high eviction = undersized map
+
+## ShardedPulseMap (v0.6.1+)
+
+For high-concurrency workloads, `ShardedPulseMap` splits data across **16 independent shards**:
+
+```
+ShardedPulseMap:
+  ├── Shard 0:  ConcurrentPulseMap (own RwLock + spinlocks)
+  ├── Shard 1:  ConcurrentPulseMap (own RwLock + spinlocks)
+  ├── ...
+  └── Shard 15: ConcurrentPulseMap (own RwLock + spinlocks)
+
+Shard selection: h1 >> 60 (top 4 bits of hash)
+```
+
+**Result:** Threads accessing different shards have **zero lock contention**.
+
+```rust
+use pulse_map::ShardedPulseMap;
+use std::sync::Arc;
+
+let map = Arc::new(ShardedPulseMap::<u32, u32>::new(4096));
+// Same API as ConcurrentPulseMap — just faster under contention
+```
+
+### resize_all() — Per-Shard Rehash
+
+Unlike ConcurrentPulseMap's stop-the-world resize, `resize_all()` rehashes one shard at a time. Other shards remain fully operational.
+
+See [ShardedPulseMap API](./api-sharded.md) for full details.
