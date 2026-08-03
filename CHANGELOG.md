@@ -6,6 +6,74 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [v0.6.1] — 2026-08-03
+
+### 🚀 Sharded Concurrency + Per-Entry TTL + Real Competitor Benchmarks
+
+Major release: 16-shard concurrent map (2.4-3.1x faster), per-entry TTL, and honest benchmarks against moka + quick_cache.
+
+### Added
+
+**ShardedPulseMap (`src/sharded.rs`) — PR-3**
+- `ShardedPulseMap<K,V>` — 16 independent `ConcurrentPulseMap` shards
+- Shard selection: `h1 >> 60` (top 4 bits, independent from bucket selection)
+- `insert()`, `get()`, `peek()`, `remove()`, `contains_key()` — routed to shard by hash
+- `resize_all(n)` — per-shard rehash, no stop-the-world pause
+- TTL propagation: `set_ttl()` applied to all shards, `current_epoch()` = max
+- `len()`, `capacity()`, `load_factor()`, `eviction_count()` — aggregated stats
+
+**Per-Entry TTL (`raw.rs`, `lib.rs`, `sync.rs`, `sharded.rs`) — PR-4**
+- `insert_ttl(key, value, ttl)` on all map types (PulseMap, TypedPulseMap, ConcurrentPulseMap, ShardedPulseMap)
+- `ttl = 0`: use global default (`set_ttl()`), `u32::MAX`: never expire, `N`: expire after N inserts
+- `SlotTTL { epoch, ttl }` replaces `Vec<u32>` epochs (8 bytes/slot, was 4)
+- Re-inserting refreshes both epoch and per-entry TTL
+- Backward compatible: `set_ttl()`, `get_ttl()`, `insert()` behavior unchanged
+
+**Zero-Copy Key Borrow (`lib.rs`, `sync.rs`) — PR-2**
+- `PulseKey::key_bytes()` — borrow key bytes without allocation on read path
+- Numeric types return stack-allocated `[u8; N]` via `with_key_bytes()`
+- String lookup improved by -4.8%
+
+**Real Competitor Benchmarks — PR-5**
+- moka + quick_cache benchmarks (single-thread + 4-thread)
+- Honest README benchmark table (losses documented alongside wins)
+
+### Changed
+
+- `raw.rs`: `epochs: Vec<u32>` → `slots_ttl: Vec<SlotTTL>`, `ttl_epochs` → `default_ttl`
+- `raw.rs`: `insert()` refactored to `insert_internal(key, value, ttl)`
+- `sync.rs`: epoch storage updated to `Vec<SlotTTL>`, `ttl_epochs` → `default_ttl`
+- `is_expired()` now checks per-entry TTL with fallback to default
+- `find_free_or_expired()` no longer requires global TTL to be set
+
+### Benchmarks (v0.6.1)
+
+**Single-Thread (100K ops)**
+
+| Benchmark | PulseMap | `lru` | `quick_cache` | `moka` |
+|-----------|:-------:|:-----:|:-------------:|:------:|
+| INSERT | **6.1 ms** | 19.1 ms | 5.6 ms | 161 ms |
+| LOOKUP | 5.4 ms | 5.4 ms | **2.8 ms** | 40 ms |
+| EVICTION (50K) | **1.9 ms** 🥇 | 2.3 ms | 3.3 ms | 55.5 ms |
+
+**Multi-Thread — 4 Threads, 100K ops**
+
+| Benchmark | ShardedPulseMap | ConcurrentPulseMap | `moka` |
+|-----------|:--------------:|:-----------------:|:------:|
+| 4T INSERT | **8.8 ms** 🥇 | 20.2 ms | 104 ms |
+| 4T LOOKUP | **9.0 ms** 🥇 | 35.0 ms | 21.1 ms |
+| 4T MIXED | **15.9 ms** 🥇 | 46.6 ms | 197 ms |
+
+### Testing
+
+- **58 tests passing** (up from 57)
+- 5 new ShardedPulseMap tests (basic, 4-thread, resize_all, TTL, len-sum)
+- 6 new per-entry TTL tests (different expiries, never-expire, overrides-global, typed, concurrent, refresh)
+
+### Rejected
+
+- **PR-1 AHash**: A/B benchmark showed AHash 12.8% SLOWER than wyhash. wyhash retained.
+
 ## [v0.1.0] — 2026-05-22
 
 ### 🎉 Initial Release — Core Engine
