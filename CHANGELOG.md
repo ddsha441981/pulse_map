@@ -310,7 +310,7 @@ Implementing `Index` would require either:
 
 ---
 
-## [v0.6.0] — 2026-06-16
+## [v0.6.0] — 2026-06-15
 
 ### ⚡ Performance + Memory + TTL
 
@@ -373,23 +373,37 @@ assert_eq!(cache.get(b"session"), None); // expired ✓
 - 4 new slab free list tests (reuse, larger rewrite, bulk reuse)
 - 5 new TTL tests (basic expiry, update refresh, typed map, zero disables, epoch counter)
 
-### Benchmarks (v0.6.0) — Stable Run
+### Benchmarks (v0.6.0) — Actual Measured Results
 
-| Benchmark (100K ops) | v0.5.0 | v0.6.0 | Note |
+> Run: `cargo bench -- lookup` on same machine. Numbers vary per run.
+
+| Benchmark (100K ops) | v0.5.0 (est.) | v0.6.0 (measured) | Note |
 |---|:---:|:---:|:---:|
-| raw_lookup | 7.22 ms | ~7.2 ms | No change (expected) |
-| raw_mixed | 17.46 ms | **16.0 ms** | ✅ -8% (remove() faster) |
-| raw_eviction | 1.10 ms | ~1.10 ms | No change (expected) |
-| **lru_lookup** | 3.40 ms | 3.40 ms | Benchmark reference |
+| raw_lookup | ~7.2 ms | **8.38 ms** | No algorithmic change |
+| typed_lookup | ~7.5 ms | **8.71 ms** | No algorithmic change |
+| raw_mixed | 17.46 ms | not re-measured | Minor improvement from match_mask in remove() |
+| lru_lookup | 3.40 ms | **3.17 ms** | Reference — not our code |
 
-> **Note:** TTL and slab free list are correctness/memory fixes, not raw speed improvements.
-> The -8% mixed improvement comes from `remove()` using `match_mask()` instead of brute-force.
+> **Correction from earlier estimate:** The "-8% mixed improvement" claim was based on
+> one run and not reliably reproducible. v0.6.0 is a **correctness + memory release**,
+> not a performance release. The lookup gap vs `lru` is unchanged.
 
 ### Known Remaining Gap
 
 ```
-PulseMap lookup: ~7ms
-lru lookup:      ~3.4ms
-Gap: ~2x — structural (lru stores typed values directly, PulseMap stores bytes)
-Closing this gap requires changing core storage model → v0.7.0 scope
+Measured (100K ops):
+  PulseMap typed lookup : 8.71 ms
+  lru lookup            : 3.17 ms
+  Gap                   : 2.7x  ← UNCHANGED from v0.5.0
+
+Root cause (profiled):
+  from_bytes deserialization → only ~6% of lookup time (NOT the bottleneck)
+
+  Actual bottlenecks:
+    wyhash compute_hash()    → ~35-40% of lookup
+    to_bytes() on every get  → ~10%  (key serialized even for read)
+    cache misses on bucket   → ~35-40%
+
+→ v0.7.0 will target wyhash replacement (AHash) and zero-copy key borrow.
+  TypedSlabPool approach was investigated and rejected — low ROI for numeric types.
 ```

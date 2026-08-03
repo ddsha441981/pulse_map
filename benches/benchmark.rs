@@ -488,6 +488,87 @@ fn concurrent_mixed_4t_100k(c: &mut Criterion) {
     });
 }
 
+// ═══════════════════════════════════════
+// ShardedPulseMap Benchmarks (16-shard, no global lock)
+// ═══════════════════════════════════════
+
+use pulse_map::ShardedPulseMap;
+
+fn sharded_insert_4t_100k(c: &mut Criterion) {
+    c.bench_function("sharded_4t_insert_100k", |b| {
+        b.iter(|| {
+            let map = Arc::new(ShardedPulseMap::<u32, u32>::new(4096));
+            let handles: Vec<_> = (0..4u32)
+                .map(|t| {
+                    let m = map.clone();
+                    thread::spawn(move || {
+                        for i in 0..25_000u32 {
+                            m.insert(t * 100_000 + i, i);
+                        }
+                    })
+                })
+                .collect();
+            for h in handles {
+                h.join().unwrap();
+            }
+            black_box(map.len());
+        });
+    });
+}
+
+fn sharded_lookup_4t_100k(c: &mut Criterion) {
+    let map = Arc::new(ShardedPulseMap::<u32, u32>::new(4096));
+    for i in 0u32..100_000 {
+        map.insert(i, i * 2);
+    }
+    c.bench_function("sharded_4t_lookup_100k", |b| {
+        b.iter(|| {
+            let handles: Vec<_> = (0..4u32)
+                .map(|t| {
+                    let m = map.clone();
+                    thread::spawn(move || {
+                        let mut hits = 0u64;
+                        for i in 0..25_000u32 {
+                            if m.get(&(t * 25_000 + i)).is_some() {
+                                hits += 1;
+                            }
+                        }
+                        hits
+                    })
+                })
+                .collect();
+            let total: u64 = handles.into_iter().map(|h| h.join().unwrap()).sum();
+            black_box(total);
+        });
+    });
+}
+
+fn sharded_mixed_4t_100k(c: &mut Criterion) {
+    c.bench_function("sharded_4t_mixed_100k", |b| {
+        b.iter(|| {
+            let map = Arc::new(ShardedPulseMap::<u32, u32>::new(4096));
+            let handles: Vec<_> = (0..4u32)
+                .map(|t| {
+                    let m = map.clone();
+                    thread::spawn(move || {
+                        for i in 0..25_000u32 {
+                            let key = t * 100_000 + i;
+                            m.insert(key, i);
+                            if i > 0 {
+                                black_box(m.get(&(key - 1)));
+                            }
+                        }
+                    })
+                })
+                .collect();
+            for h in handles {
+                h.join().unwrap();
+            }
+            black_box(map.len());
+        });
+    });
+}
+
 criterion_group!(
     benches,
     // PulseMap Raw
@@ -521,10 +602,14 @@ criterion_group!(
     std_lookup_100k,
     std_mixed_100k,
     std_iterator,
-    // ConcurrentPulseMap
+    // ConcurrentPulseMap (single-lock)
     concurrent_insert_1t_100k,
     concurrent_insert_4t_100k,
     concurrent_lookup_4t_100k,
     concurrent_mixed_4t_100k,
+    // ShardedPulseMap (16-shard, no global lock)
+    sharded_insert_4t_100k,
+    sharded_lookup_4t_100k,
+    sharded_mixed_4t_100k,
 );
 criterion_main!(benches);
