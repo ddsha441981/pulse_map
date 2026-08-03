@@ -142,7 +142,11 @@ impl<K: PulseKey, V: PulseValue> ShardedPulseMap<K, V> {
 
     /// Highest epoch across shards (the most active shard's insert count).
     pub fn current_epoch(&self) -> u32 {
-        self.shards.iter().map(|s| s.current_epoch()).max().unwrap_or(0)
+        self.shards
+            .iter()
+            .map(|s| s.current_epoch())
+            .max()
+            .unwrap_or(0)
     }
 
     /// Total live entries across all shards.

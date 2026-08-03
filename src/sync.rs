@@ -256,10 +256,7 @@ impl<K: PulseKey, V: PulseValue> ConcurrentPulseMap<K, V> {
     #[inline]
     fn stamp_epoch(&self, state: &MapInner, bucket_idx: usize, slot_idx: u8, ttl: u32) {
         let epoch = self.current_epoch.load(Ordering::Relaxed);
-        state.epochs.lock().unwrap()[bucket_idx * 4 + slot_idx as usize] = SlotTTL {
-            epoch,
-            ttl,
-        };
+        state.epochs.lock().unwrap()[bucket_idx * 4 + slot_idx as usize] = SlotTTL { epoch, ttl };
     }
 
     /// Thread-safe insert. Uses the map's default TTL.

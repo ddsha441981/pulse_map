@@ -43,10 +43,10 @@ use std::{string::String, vec::Vec};
 mod engine;
 mod iter;
 mod raw;
-#[cfg(all(target_arch = "x86_64", feature = "simd"))]
-mod simd;
 #[cfg(feature = "std")]
 mod sharded;
+#[cfg(all(target_arch = "x86_64", feature = "simd"))]
+mod simd;
 #[cfg(feature = "std")]
 mod sync;
 mod traits;
@@ -1088,7 +1088,11 @@ mod tests {
             map.insert(&i.to_le_bytes(), b"x");
         }
         // k1: inserted epoch 1, current = 5, age = 4 > 3 → expired
-        assert_eq!(map.get(b"k1"), None, "k1 should be expired after 3+1 inserts");
+        assert_eq!(
+            map.get(b"k1"),
+            None,
+            "k1 should be expired after 3+1 inserts"
+        );
         // k2: inserted epoch 2, current = 5, age = 3 < 10 → alive
         assert_eq!(map.get(b"k2"), Some(&b"v2"[..]), "k2 should still be alive");
     }
@@ -1104,7 +1108,11 @@ mod tests {
         for i in 0u32..3 {
             map.insert(&i.to_le_bytes(), b"x");
         }
-        assert_eq!(map.get(b"forever"), Some(&b"val"[..]), "u32::MAX entry must never expire");
+        assert_eq!(
+            map.get(b"forever"),
+            Some(&b"val"[..]),
+            "u32::MAX entry must never expire"
+        );
         assert_eq!(map.get(b"normal"), None, "normal entry should have expired");
     }
 
@@ -1119,7 +1127,11 @@ mod tests {
         map.insert(b"b", b"2"); // epoch 3
         map.insert(b"c", b"3"); // epoch 4 → short age = 3 > 2 → expired
 
-        assert_eq!(map.get(b"short"), None, "per-entry TTL=2 should override global TTL=100");
+        assert_eq!(
+            map.get(b"short"),
+            None,
+            "per-entry TTL=2 should override global TTL=100"
+        );
     }
 
     #[test]
@@ -1138,7 +1150,11 @@ mod tests {
 
         assert_eq!(map.get(&1), None, "key=1 should be expired (TTL=3)");
         assert_eq!(map.get(&2), Some(200), "key=2 should never expire");
-        assert_eq!(map.get(&3), Some(300), "key=3 uses global TTL=100, still alive");
+        assert_eq!(
+            map.get(&3),
+            Some(300),
+            "key=3 uses global TTL=100, still alive"
+        );
     }
 
     #[cfg(feature = "std")]
@@ -1171,8 +1187,12 @@ mod tests {
 
         map.insert(b"c", b"3"); // epoch 5
         map.insert(b"d", b"4"); // epoch 6
-        // key: epoch 4, current = 6, age = 2 < 3 → alive
-        assert_eq!(map.get(b"key"), Some(&b"v2"[..]), "re-insert should refresh epoch");
+                                // key: epoch 4, current = 6, age = 2 < 3 → alive
+        assert_eq!(
+            map.get(b"key"),
+            Some(&b"v2"[..]),
+            "re-insert should refresh epoch"
+        );
 
         map.insert(b"e", b"5"); // epoch 7
         map.insert(b"f", b"6"); // epoch 8 → age = 4 > 3 → expired

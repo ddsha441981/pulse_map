@@ -106,7 +106,11 @@ impl PulseMapRaw {
     #[inline]
     fn is_expired(&self, bucket_idx: usize, slot_idx: u8) -> bool {
         let entry = self.slots_ttl[bucket_idx * 4 + slot_idx as usize];
-        let effective_ttl = if entry.ttl == 0 { self.default_ttl } else { entry.ttl };
+        let effective_ttl = if entry.ttl == 0 {
+            self.default_ttl
+        } else {
+            entry.ttl
+        };
         if effective_ttl == 0 || effective_ttl == u32::MAX {
             return false;
         }
