@@ -260,25 +260,20 @@ Layer 1: engine/    → MetaWord, Slot, Bucket, SlabPool, hash (wyhash)
 ## Project Structure
 
 ```
-new_hash_table/
-├── Cargo.toml                         # Workspace root
-│
-├── pulse_map/                         # Core Rust crate
-│   ├── src/
-│   │   ├── lib.rs                     # Public API (TypedPulseMap, Entry, traits)
-│   │   ├── raw.rs                     # PulseMapRaw (TTL, eviction, slab)
-│   │   ├── sync.rs                    # ConcurrentPulseMap (spinlock + RwLock)
-│   │   ├── iter.rs                    # RawIter, TypedIter
-│   │   ├── traits.rs                  # Debug, Display, Extend, From<HashMap>
-│   │   ├── simd.rs                    # SIMD H2 matching (x86_64, optional)
-│   │   └── engine/                    # MetaWord, Slot, Bucket, SlabPool, hash
-│   ├── benches/benchmark.rs           # Criterion benchmarks
-│   └── docs/                          # mdBook documentation
-│
-├── pulse_map_ffi/                     # C FFI bindings
-├── pulse_map_py/                      # Python bindings (PyO3 + maturin)
-├── pulse_map_java/                    # Java bindings (Panama FFM, Java 22+)
-└── pulse_map_node/                    # Node.js bindings (napi-rs)
+pulse_map/
+├── Cargo.toml                         # Package manifest
+├── src/
+│   ├── lib.rs                         # Public API (TypedPulseMap, Entry, traits)
+│   ├── raw.rs                         # PulseMapRaw (TTL, per-entry TTL, eviction, slab)
+│   ├── sync.rs                        # ConcurrentPulseMap (spinlock + RwLock)
+│   ├── sharded.rs                     # ShardedPulseMap (16-shard, no global lock)
+│   ├── iter.rs                        # RawIter, TypedIter
+│   ├── traits.rs                      # Debug, Display, Extend, From<HashMap>
+│   ├── simd.rs                        # SIMD H2 matching (x86_64, optional)
+│   └── engine/                        # MetaWord, Slot, Bucket, SlabPool, hash
+├── benches/benchmark.rs               # Criterion benchmarks (PulseMap, lru, moka, quick_cache)
+├── docs/                              # mdBook documentation
+└── examples/                          # basic, concurrent examples
 ```
 
 ---

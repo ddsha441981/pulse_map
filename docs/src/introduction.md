@@ -55,9 +55,11 @@ println!("Entries: {}, Evictions: {}", map.len(), map.eviction_count());
 - **🏗️ Cache-Line Architecture** — 64-byte buckets with 4 slots each
 - **⚡ Zero-Cost Eviction** — LFU+LRU metadata embedded in bucket
 - **🔒 Thread-Safe** — Per-bucket spinlocks, `&self` API
+- **🏗️ 16-Shard Concurrency** — ShardedPulseMap: 2.4–3.1x faster than global lock
+- **⏱️ Per-Entry TTL** — Individual expiry per key, or global default
 - **📏 Bounded Memory** — Fixed capacity, no unbounded growth
 - **🔄 Auto-Resize** — Optional dynamic growth at 75% load
-- **🌐 Multi-Language** — C, Python, Java 22+, Node.js bindings
+- **🌐 C FFI Bindings** — Use from C, or build your own language bridge
 - **🔧 no_std Compatible** — Core data structures work without allocator
 
 ## Supported Platforms
