@@ -23,10 +23,11 @@ cargo doc --no-deps     # No doc warnings
 ## Architecture
 
 ```
+Layer 5: sharded.rs → ShardedPulseMap (16 shards)
 Layer 4: sync.rs    → ConcurrentPulseMap
 Layer 3: lib.rs     → User API (TypedPulseMap, PulseMap)
-Layer 2: raw.rs     → Hash table logic
-Layer 1: core/      → MetaWord, Slot, Bucket, hash, slab
+Layer 2: raw.rs     → Hash table logic + per-entry TTL
+Layer 1: engine/    → MetaWord, Slot, Bucket, hash, slab
 ```
 
 ## Key Rules

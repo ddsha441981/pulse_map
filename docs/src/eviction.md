@@ -92,4 +92,5 @@ PulseMap's eviction is **not configurable** by design. The 4-bit LFU + 3-bit LRU
 If you need different eviction behavior:
 - **More capacity instead of better eviction** → Use auto-resize: `with_auto_resize(n)`
 - **No eviction at all** → Use auto-resize with large initial size
-- **TTL-based expiration** → Planned for v0.6.0
+- **TTL-based expiration** → Use `set_ttl(n)` (global) or `insert_ttl(k, v, n)` (per-entry)
+- **Permanent entries** → Use `insert_ttl(key, val, u32::MAX)` — never expire

@@ -75,4 +75,4 @@ See the [TTL page](./ttl.md) for full details.
 - You already have byte-serialized keys/values
 - Maximum performance (no serialization overhead)
 - Building custom protocols over raw bytes
-- Interfacing with FFI (C, Java, Python, Node.js)
+- Interfacing with C FFI bindings

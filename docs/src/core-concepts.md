@@ -113,10 +113,19 @@ ConcurrentPulseMap
   │     ├── Vec<UnsafeCell<Bucket>>   ← 64 bytes each, cache-aligned
   │     ├── BucketLocks               ← 1 AtomicU8 per bucket
   │     ├── Mutex<SlabPool>           ← arena for large KV pairs
+  │     ├── Mutex<Vec<SlotTTL>>       ← per-entry TTL metadata (v0.6.1+)
   │     ├── num_buckets: usize
   │     └── bucket_mask: usize       ← num_buckets - 1 (power of 2)
   ├── count: AtomicUsize             ← number of entries
   ├── eviction_count: AtomicUsize    ← total evictions
   ├── auto_resize: bool
   └── resize_threshold: f64          ← default 0.75
+
+ShardedPulseMap (v0.6.1+)
+  └── shards: [ConcurrentPulseMap; 16]
+        ├── Shard 0:  independent RwLock + buckets + slab
+        ├── Shard 1:  independent RwLock + buckets + slab
+        ├── ...
+        └── Shard 15: independent RwLock + buckets + slab
+      Shard = h1 >> 60 (top 4 bits of hash)
 ```

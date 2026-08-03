@@ -25,7 +25,7 @@
 - [Architecture & Internals](./architecture.md)
 - [Performance & Benchmarks](./benchmarks.md)
 - [Feature Flags](./features.md)
-- [FFI & Language Bindings](./ffi-bindings.md)
+- [FFI — C Bindings](./ffi-bindings.md)
 
 ---
 
