@@ -15,6 +15,15 @@ use alloc::vec;
 #[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
 
+/// Per-slot TTL data: insertion epoch + per-entry TTL override.
+#[derive(Clone, Copy, Default)]
+pub(crate) struct SlotTTL {
+    /// Epoch at which this entry was inserted/last updated.
+    pub epoch: u32,
+    /// Per-entry TTL. 0 = use default_ttl, u32::MAX = never expire.
+    pub ttl: u32,
+}
+
 /// Raw byte-level cache-line hash table with zero-cost eviction and optional TTL.
 ///
 /// This is the engine that powers `PulseMap<K, V>`. It operates on raw `&[u8]` slices.
@@ -28,13 +37,12 @@ pub struct PulseMapRaw {
     eviction_count: usize,
 
     // ── TTL via epoch counter ──
-    /// Insertion timestamp per slot: epochs[bucket_idx * 4 + slot_idx]
-    epochs: Vec<u32>,
+    /// Per-slot TTL data: insertion epoch + per-entry TTL override.
+    slots_ttl: Vec<SlotTTL>,
     /// Monotonically increasing counter. Incremented on every insert.
     current_epoch: u32,
-    /// TTL in insertion epochs. 0 = disabled. Entry expires when
-    /// `current_epoch.wrapping_sub(slot_epoch) > ttl_epochs`.
-    ttl_epochs: u32,
+    /// Default TTL in insertion epochs. 0 = disabled. Per-entry TTL overrides this.
+    default_ttl: u32,
 }
 
 // Safety: PulseMapRaw uses interior mutability only for priority metadata updates
@@ -50,7 +58,7 @@ impl PulseMapRaw {
     pub fn new(num_buckets: usize) -> Self {
         let actual = num_buckets.max(1).next_power_of_two();
         let buckets = vec![Bucket::empty(); actual];
-        let epochs = vec![0u32; actual * 4];
+        let slots_ttl = vec![SlotTTL::default(); actual * 4];
         Self {
             buckets,
             slab_pool: SlabPool::new(),
@@ -58,9 +66,9 @@ impl PulseMapRaw {
             bucket_mask: actual - 1,
             count: 0,
             eviction_count: 0,
-            epochs,
+            slots_ttl,
             current_epoch: 0,
-            ttl_epochs: 0,
+            default_ttl: 0,
         }
     }
 
@@ -79,13 +87,13 @@ impl PulseMapRaw {
     /// ```
     #[inline]
     pub fn set_ttl(&mut self, ttl_epochs: u32) {
-        self.ttl_epochs = ttl_epochs;
+        self.default_ttl = ttl_epochs;
     }
 
     /// Returns the current TTL setting (0 = disabled).
     #[inline]
     pub fn get_ttl(&self) -> u32 {
-        self.ttl_epochs
+        self.default_ttl
     }
 
     /// Returns the current epoch counter (total insertions so far).
@@ -94,25 +102,42 @@ impl PulseMapRaw {
         self.current_epoch
     }
 
-    /// Check if a slot has expired (TTL enabled and entry is too old).
+    /// Check if a slot has expired (per-entry or global TTL).
     #[inline]
     fn is_expired(&self, bucket_idx: usize, slot_idx: u8) -> bool {
-        if self.ttl_epochs == 0 {
+        let entry = self.slots_ttl[bucket_idx * 4 + slot_idx as usize];
+        let effective_ttl = if entry.ttl == 0 { self.default_ttl } else { entry.ttl };
+        if effective_ttl == 0 || effective_ttl == u32::MAX {
             return false;
         }
-        let slot_epoch = self.epochs[bucket_idx * 4 + slot_idx as usize];
-        self.current_epoch.wrapping_sub(slot_epoch) > self.ttl_epochs
+        self.current_epoch.wrapping_sub(entry.epoch) > effective_ttl
     }
 
-    /// Stamp a slot's epoch on insert.
+    /// Stamp a slot's insertion epoch and per-entry TTL.
     #[inline]
-    fn stamp_epoch(&mut self, bucket_idx: usize, slot_idx: u8) {
-        self.epochs[bucket_idx * 4 + slot_idx as usize] = self.current_epoch;
+    fn stamp_slot_ttl(&mut self, bucket_idx: usize, slot_idx: u8, ttl: u32) {
+        self.slots_ttl[bucket_idx * 4 + slot_idx as usize] = SlotTTL {
+            epoch: self.current_epoch,
+            ttl,
+        };
     }
 
-    /// Insert a raw key-value pair. Evicts lowest-priority entry on full bucket.
+    /// Insert a raw key-value pair. Uses the map's default TTL.
     pub fn insert(&mut self, key: &[u8], value: &[u8]) {
-        // Advance epoch on every insert
+        self.insert_internal(key, value, 0);
+    }
+
+    /// Insert with a per-entry TTL override.
+    ///
+    /// - `ttl = 0`: use the map's default TTL (`set_ttl()`)
+    /// - `ttl = u32::MAX`: this entry never expires
+    /// - `ttl = N`: this entry expires after N insertions
+    pub fn insert_ttl(&mut self, key: &[u8], value: &[u8], ttl: u32) {
+        self.insert_internal(key, value, ttl);
+    }
+
+    /// Internal insert with TTL parameter. `ttl = 0` means use `default_ttl`.
+    fn insert_internal(&mut self, key: &[u8], value: &[u8], ttl: u32) {
         self.current_epoch = self.current_epoch.wrapping_add(1);
 
         let hr = compute_hash(key);
@@ -127,7 +152,6 @@ impl PulseMapRaw {
             m &= m - 1;
             let slot = &bucket.slots[slot_idx as usize];
             if slot.matches_key(key, &hr, &self.slab_pool) {
-                // Free old slab entry if in slab mode
                 if slot.get_mode() == 1 {
                     self.slab_pool.free(slot.slab_idx());
                 }
@@ -139,18 +163,15 @@ impl PulseMapRaw {
                     s.set_slab(hr.ext_fp_hi, hr.ext_fp, idx);
                 }
                 bucket.meta.on_access(slot_idx);
-                // Refresh epoch on update
-                self.stamp_epoch(bucket_idx, slot_idx);
+                self.stamp_slot_ttl(bucket_idx, slot_idx, ttl);
                 return;
             }
         }
 
         // 2. Find free slot or evict
-        // Also treat expired slots as free (lazy TTL eviction)
         let (target_slot, is_eviction) = if let Some(free) = self.find_free_or_expired(bucket_idx) {
             let is_ev = self.buckets[bucket_idx].meta.get_state(free) == SlotState::Full;
             if is_ev {
-                // Expired slot being reclaimed
                 let old_slot = &self.buckets[bucket_idx].slots[free as usize];
                 if old_slot.get_mode() == 1 {
                     self.slab_pool.free(old_slot.slab_idx());
@@ -183,7 +204,7 @@ impl PulseMapRaw {
             .set_state(target_slot, SlotState::Full);
         self.buckets[bucket_idx].meta.set_h2(target_slot, hr.h2);
         self.buckets[bucket_idx].meta.on_insert(target_slot);
-        self.stamp_epoch(bucket_idx, target_slot);
+        self.stamp_slot_ttl(bucket_idx, target_slot, ttl);
 
         if !is_eviction {
             self.count += 1;
@@ -198,8 +219,8 @@ impl PulseMapRaw {
             if state != SlotState::Full {
                 return Some(i); // Empty or Tombstone
             }
-            // Expired Full slot → reusable
-            if self.ttl_epochs > 0 && self.is_expired(bucket_idx, i) {
+            // Expired Full slot → reusable (per-entry or global TTL)
+            if self.is_expired(bucket_idx, i) {
                 return Some(i);
             }
         }

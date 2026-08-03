@@ -379,6 +379,17 @@ impl<K: PulseKey, V: PulseValue> TypedPulseMap<K, V> {
         self.raw.insert(kb.as_ref(), vb.as_ref());
     }
 
+    /// Insert a key-value pair with a per-entry TTL override.
+    ///
+    /// - `ttl = 0`: use the map's default TTL (`set_ttl()`)
+    /// - `ttl = u32::MAX`: this entry never expires
+    /// - `ttl = N`: this entry expires after N insertions
+    pub fn insert_ttl(&mut self, key: K, value: V, ttl: u32) {
+        let kb = key.to_bytes();
+        let vb = value.to_bytes();
+        self.raw.insert_ttl(kb.as_ref(), vb.as_ref(), ttl);
+    }
+
     /// Look up a key. Returns the deserialized value if found.
     pub fn get(&self, key: &K) -> Option<V> {
         key.with_key_bytes(|kb| self.raw.get(kb).and_then(V::from_bytes))
@@ -1061,5 +1072,110 @@ mod tests {
         // (key may have been evicted by capacity, but not by TTL)
         assert_eq!(map.get_ttl(), 0);
         assert_eq!(map.current_epoch(), 501); // 1 + 500 inserts
+    }
+
+    // ── Per-Entry TTL tests (PR-4) ──
+
+    #[test]
+    fn test_per_entry_ttl_different_expiries() {
+        let mut map = PulseMap::new(64);
+        // k1 expires after 3 inserts, k2 after 10
+        map.insert_ttl(b"k1", b"v1", 3);
+        map.insert_ttl(b"k2", b"v2", 10);
+
+        // 3 more inserts → k1 age = 3 (boundary)
+        for i in 0u32..3 {
+            map.insert(&i.to_le_bytes(), b"x");
+        }
+        // k1: inserted epoch 1, current = 5, age = 4 > 3 → expired
+        assert_eq!(map.get(b"k1"), None, "k1 should be expired after 3+1 inserts");
+        // k2: inserted epoch 2, current = 5, age = 3 < 10 → alive
+        assert_eq!(map.get(b"k2"), Some(&b"v2"[..]), "k2 should still be alive");
+    }
+
+    #[test]
+    fn test_per_entry_ttl_never_expire() {
+        let mut map = PulseMap::new(64);
+        map.set_ttl(2); // global: expire after 2
+        map.insert_ttl(b"forever", b"val", u32::MAX); // never expires
+        map.insert(b"normal", b"val"); // uses global TTL = 2
+
+        // 3 inserts → normal should expire, forever should survive
+        for i in 0u32..3 {
+            map.insert(&i.to_le_bytes(), b"x");
+        }
+        assert_eq!(map.get(b"forever"), Some(&b"val"[..]), "u32::MAX entry must never expire");
+        assert_eq!(map.get(b"normal"), None, "normal entry should have expired");
+    }
+
+    #[test]
+    fn test_per_entry_ttl_overrides_global() {
+        let mut map = PulseMap::new(64);
+        map.set_ttl(100); // global: 100
+
+        // Per-entry TTL = 2 (overrides global 100)
+        map.insert_ttl(b"short", b"val", 2);
+        map.insert(b"a", b"1"); // epoch 2
+        map.insert(b"b", b"2"); // epoch 3
+        map.insert(b"c", b"3"); // epoch 4 → short age = 3 > 2 → expired
+
+        assert_eq!(map.get(b"short"), None, "per-entry TTL=2 should override global TTL=100");
+    }
+
+    #[test]
+    fn test_per_entry_ttl_typed_map() {
+        let mut map = TypedPulseMap::<u32, u32>::new(64);
+        map.set_ttl(100); // global default
+
+        map.insert_ttl(1, 100, 3); // expires after 3
+        map.insert_ttl(2, 200, u32::MAX); // never expires
+        map.insert(3, 300); // uses global TTL = 100
+
+        // 4 inserts to expire key=1
+        for i in 10..14u32 {
+            map.insert(i, i);
+        }
+
+        assert_eq!(map.get(&1), None, "key=1 should be expired (TTL=3)");
+        assert_eq!(map.get(&2), Some(200), "key=2 should never expire");
+        assert_eq!(map.get(&3), Some(300), "key=3 uses global TTL=100, still alive");
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn test_per_entry_ttl_concurrent_map() {
+        let map = ConcurrentPulseMap::<u32, u32>::new(64);
+        map.set_ttl(100);
+
+        map.insert_ttl(1, 100, 3);
+        map.insert_ttl(2, 200, u32::MAX);
+
+        for i in 10..14u32 {
+            map.insert(i, i);
+        }
+
+        assert_eq!(map.get(&1), None, "concurrent: key=1 expired (TTL=3)");
+        assert_eq!(map.get(&2), Some(200), "concurrent: key=2 never expires");
+    }
+
+    #[test]
+    fn test_insert_ttl_refresh_on_reinsert() {
+        let mut map = PulseMap::new(64);
+        map.insert_ttl(b"key", b"v1", 3); // epoch 1, TTL=3
+
+        map.insert(b"a", b"1"); // epoch 2
+        map.insert(b"b", b"2"); // epoch 3
+
+        // Re-insert with TTL refreshes epoch
+        map.insert_ttl(b"key", b"v2", 3); // epoch 4, TTL=3 (refreshed!)
+
+        map.insert(b"c", b"3"); // epoch 5
+        map.insert(b"d", b"4"); // epoch 6
+        // key: epoch 4, current = 6, age = 2 < 3 → alive
+        assert_eq!(map.get(b"key"), Some(&b"v2"[..]), "re-insert should refresh epoch");
+
+        map.insert(b"e", b"5"); // epoch 7
+        map.insert(b"f", b"6"); // epoch 8 → age = 4 > 3 → expired
+        assert_eq!(map.get(b"key"), None, "key should expire after refresh+TTL");
     }
 }
