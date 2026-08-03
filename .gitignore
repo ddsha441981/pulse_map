@@ -3,3 +3,10 @@ Cargo.lock
 *.swp
 *.swo
 .DS_Store
+
+# local-only working files
+plan/
+brain/
+research/
+result.txt
+docs/book/

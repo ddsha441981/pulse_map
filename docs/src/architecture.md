@@ -3,10 +3,11 @@
 ## Layer Architecture
 
 ```
+Layer 5: sharded.rs     → ShardedPulseMap (16 × ConcurrentPulseMap, shard-per-key)
 Layer 4: sync.rs        → ConcurrentPulseMap (thread-safe wrapper)
 Layer 3: lib.rs         → TypedPulseMap<K,V>, PulseMap (user API)
-Layer 2: raw.rs         → PulseMapRaw (hash table logic)
-Layer 1: core/          → Building blocks
+Layer 2: raw.rs         → PulseMapRaw (hash table logic, per-entry TTL)
+Layer 1: engine/        → Building blocks
            ├── meta.rs  → MetaWord (8-byte eviction metadata)
            ├── slot.rs  → Slot (14-byte inline/slab storage)
            ├── bucket.rs→ Bucket (64-byte cache line unit)
@@ -19,13 +20,14 @@ Layer 1: core/          → Building blocks
 | File | Lines | Purpose |
 |------|:-----:|---------|
 | `lib.rs` | ~100 | Public API, type aliases, trait defs |
-| `raw.rs` | ~200 | Core insert/get/remove/resize logic |
-| `sync.rs` | ~530 | ConcurrentPulseMap + per-bucket spinlocks |
-| `core/meta.rs` | ~150 | MetaWord: H2, state, LFU, LRU bit packing |
-| `core/slot.rs` | ~120 | Slot: inline/slab dual-mode storage |
-| `core/bucket.rs` | ~50 | Bucket: MetaWord + 4 Slots = 64 bytes |
-| `core/hash.rs` | ~40 | WyHash → H1, H2, ext_fp decomposition |
-| `core/slab.rs` | ~85 | Arena allocator for large KV pairs |
+| `raw.rs` | ~330 | Core insert/get/remove/TTL/per-entry-TTL logic |
+| `sync.rs` | ~600 | ConcurrentPulseMap + per-bucket spinlocks |
+| `sharded.rs` | ~270 | ShardedPulseMap — 16-shard concurrent map |
+| `engine/meta.rs` | ~150 | MetaWord: H2, state, LFU, LRU bit packing |
+| `engine/slot.rs` | ~120 | Slot: inline/slab dual-mode storage |
+| `engine/bucket.rs` | ~50 | Bucket: MetaWord + 4 Slots = 64 bytes |
+| `engine/hash.rs` | ~40 | WyHash → H1, H2, ext_fp decomposition |
+| `engine/slab.rs` | ~85 | Arena allocator for large KV pairs |
 | `traits.rs` | ~100 | PulseKey + PulseValue trait impls |
 | `iter.rs` | ~50 | RawIter, TypedIter |
 | `simd.rs` | ~30 | Optional SIMD H2 matching (x86_64) |

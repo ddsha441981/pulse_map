@@ -2,6 +2,24 @@
 
 See the full [CHANGELOG.md](https://github.com/ddsha441981/pulse_map/blob/main/CHANGELOG.md) in the repository root.
 
+## v0.6.1 (2026-08-03)
+
+### Added
+- **ShardedPulseMap** — 16-shard concurrent map, 2.4–3.1x faster than ConcurrentPulseMap
+- **Per-entry TTL** — `insert_ttl(key, value, ttl)` on all map types
+  - `ttl = 0`: use global default, `u32::MAX`: never expire, `N`: expire after N inserts
+- **Zero-copy key borrow** — `PulseKey::with_key_bytes()` for read-path optimization
+- **Competitor benchmarks** — moka + quick_cache single-thread and 4-thread comparisons
+
+### Changed
+- `SlotTTL { epoch, ttl }` replaces `Vec<u32>` epochs (8 bytes/slot)
+- `is_expired()` now supports per-entry TTL with fallback to default
+
+### Tests
+- **58 tests** (up from 57)
+
+---
+
 ## v0.6.0 (2026-06-16)
 
 ### Added

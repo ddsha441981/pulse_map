@@ -46,6 +46,10 @@ println!("Entries: {}", map.len());
 // Insert (thread-safe, no &mut needed)
 map.insert("key".to_string(), "value".to_string());
 
+// Insert with per-entry TTL (v0.6.1+)
+map.insert_ttl("key".to_string(), "value".to_string(), 100);  // expires after 100 inserts
+map.insert_ttl("key".to_string(), "value".to_string(), u32::MAX);  // never expires
+
 // Get (updates eviction priority atomically)
 let val: Option<String> = map.get(&"key".to_string());
 
@@ -58,6 +62,8 @@ let existed: bool = map.remove(&"key".to_string());
 // Contains
 let exists: bool = map.contains_key(&"key".to_string());
 ```
+
+> **Tip:** For 3+ threads, use [`ShardedPulseMap`](./api-sharded.md) — 2.4–3.1x faster under contention.
 
 ## Manual Resize
 

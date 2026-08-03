@@ -12,6 +12,7 @@
   - [PulseMap (Raw)](./api-raw.md)
   - [TypedPulseMap<K, V>](./api-typed.md)
   - [ConcurrentPulseMap](./api-concurrent.md)
+  - [ShardedPulseMap](./api-sharded.md)
   - [Entry API](./api-entry.md)
 - [Eviction Strategy](./eviction.md)
 - [TTL — Automatic Expiry](./ttl.md)
