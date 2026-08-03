@@ -569,6 +569,88 @@ fn sharded_mixed_4t_100k(c: &mut Criterion) {
     });
 }
 
+// ═══════════════════════════════════════
+// moka 4-Thread Benchmarks (concurrent competitor comparison)
+// ═══════════════════════════════════════
+
+fn moka_insert_4t_100k(c: &mut Criterion) {
+    c.bench_function("moka_4t_insert_100k", |b| {
+        b.iter(|| {
+            let cache: moka::sync::Cache<u32, u32> = moka::sync::Cache::new(154_000);
+            let cache = Arc::new(cache);
+            let handles: Vec<_> = (0..4u32)
+                .map(|t| {
+                    let c = cache.clone();
+                    thread::spawn(move || {
+                        for i in 0..25_000u32 {
+                            c.insert(t * 100_000 + i, i);
+                        }
+                    })
+                })
+                .collect();
+            for h in handles {
+                h.join().unwrap();
+            }
+            black_box(cache.entry_count());
+        });
+    });
+}
+
+fn moka_lookup_4t_100k(c: &mut Criterion) {
+    let cache: moka::sync::Cache<u32, u32> = moka::sync::Cache::new(154_000);
+    for i in 0u32..100_000 {
+        cache.insert(i, i * 2);
+    }
+    let cache = Arc::new(cache);
+    c.bench_function("moka_4t_lookup_100k", |b| {
+        b.iter(|| {
+            let handles: Vec<_> = (0..4u32)
+                .map(|t| {
+                    let c = cache.clone();
+                    thread::spawn(move || {
+                        let mut hits = 0u64;
+                        for i in 0..25_000u32 {
+                            if c.get(&(t * 25_000 + i)).is_some() {
+                                hits += 1;
+                            }
+                        }
+                        hits
+                    })
+                })
+                .collect();
+            let total: u64 = handles.into_iter().map(|h| h.join().unwrap()).sum();
+            black_box(total);
+        });
+    });
+}
+
+fn moka_mixed_4t_100k(c: &mut Criterion) {
+    c.bench_function("moka_4t_mixed_100k", |b| {
+        b.iter(|| {
+            let cache: moka::sync::Cache<u32, u32> = moka::sync::Cache::new(154_000);
+            let cache = Arc::new(cache);
+            let handles: Vec<_> = (0..4u32)
+                .map(|t| {
+                    let c = cache.clone();
+                    thread::spawn(move || {
+                        for i in 0..25_000u32 {
+                            let key = t * 100_000 + i;
+                            c.insert(key, i);
+                            if i > 0 {
+                                black_box(c.get(&(key - 1)));
+                            }
+                        }
+                    })
+                })
+                .collect();
+            for h in handles {
+                h.join().unwrap();
+            }
+            black_box(cache.entry_count());
+        });
+    });
+}
+
 criterion_group!(
     benches,
     // PulseMap Raw
@@ -587,12 +669,12 @@ criterion_group!(
     lru_lookup_100k,
     lru_mixed_100k,
     lru_eviction_50k,
-    // moka (real competitor)
+    // moka single-thread
     moka_insert_100k,
     moka_lookup_100k,
     moka_mixed_100k,
     moka_eviction_50k,
-    // quick_cache (real competitor)
+    // quick_cache single-thread
     quick_insert_100k,
     quick_lookup_100k,
     quick_mixed_100k,
@@ -611,5 +693,9 @@ criterion_group!(
     sharded_insert_4t_100k,
     sharded_lookup_4t_100k,
     sharded_mixed_4t_100k,
+    // moka 4-thread (concurrent competitor)
+    moka_insert_4t_100k,
+    moka_lookup_4t_100k,
+    moka_mixed_4t_100k,
 );
 criterion_main!(benches);
