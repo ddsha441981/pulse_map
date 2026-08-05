@@ -38,7 +38,7 @@ fn rss_kb() -> u64 {
     if let Ok(status) = fs::read_to_string("/proc/self/status") {
         for line in status.lines() {
             if let Some(rest) = line.strip_prefix("VmRSS:") {
-                if let Some(num) = rest.trim().split_whitespace().next() {
+                if let Some(num) = rest.split_whitespace().next() {
                     return num.parse().unwrap_or(0);
                 }
             }
