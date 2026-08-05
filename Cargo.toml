@@ -41,6 +41,34 @@ required-features = ["std"]
 name = "concurrent"
 required-features = ["std"]
 
+[[example]]
+name = "all_scenarios"
+required-features = ["std"]
+
+[[example]]
+name = "memory_baseline"
+required-features = ["std"]
+
+[[example]]
+name = "production_suite_test"
+required-features = ["std"]
+
+[[example]]
+name = "quality_and_readheavy"
+required-features = ["std"]
+
+[[example]]
+name = "readratio_isolated"
+required-features = ["std"]
+
+[[example]]
+name = "real_world_latency_spikes"
+required-features = ["std"]
+
+[[example]]
+name = "real_world_game_server"
+required-features = ["std"]
+
 [profile.release]
 opt-level = 3
 lto = true
