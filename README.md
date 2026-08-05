@@ -30,8 +30,12 @@ The closest comparison in the Rust ecosystem is the [`lru`](https://crates.io/cr
 |---------|---------------------|----------|
 | Two structures to manage | HashMap + linked list | Single structure |
 | Eviction needs extra fetches | 2–3 pointer chases per eviction | Metadata is in the same bucket |
-| Memory per entry | ~48B (LRU pointers) | 14B (packed slot) |
+| Memory per entry (measured, 1M capacity, RSS) | 67.7B (`lru` crate) | **25.6B** |
 | Cache alignment | Random pointer chasing | 64-byte aligned bucket |
+
+> Slot payload itself is 14 bytes — the 25.6B/entry above is the real
+> measured cost including bucket/hash-table overhead at scale. See
+> [Memory Footprint](#memory-footprint-measured) for full numbers and methodology.
 
 ---
 
@@ -217,6 +221,139 @@ ShardedPulseMap: **2.3x faster** than ConcurrentPulseMap, **6.5-12x faster** tha
 
 ---
 
+## Write-Pressure Benchmark: Multi-Threaded, Statistical (8 threads, 1M inserts)
+
+The Criterion numbers above are single-threaded. The results below test what
+actually causes production latency spikes: **8 threads inserting concurrently**
+into a full cache, forcing continuous eviction under real contention.
+
+**Methodology** (chosen to survive scrutiny, not just look good):
+- 8 writer threads, synchronized start via `Barrier`, 1,000,000 total inserts per trial
+- **15 independent trials**, fresh cache instance each trial — results below are **mean ± stddev**, not a single lucky run
+- Moka configured with `initial_capacity` set, so table-resize cost isn't mixed into "eviction" cost
+- p99 (not max) is the primary metric — a single max sample is dominated by OS scheduler noise, not the cache's own behavior. Max is reported for reference only.
+
+| Cache | p50 | p99 (mean ± stddev) | max (mean ± stddev, high variance — reference only) |
+|---|:-:|:-:|:-:|
+| **PulseMap** | **323ns** | **911ns ± 46ns** | 5.85ms ± 1.69ms |
+| QuickCache | 350ns | 1.437µs ± 54ns | 2.03ms ± 1.26ms |
+| Simple (`Mutex<HashMap>`) | 564ns | 29.10µs ± 4.58µs | 22.52ms ± 4.54ms |
+| LRU (`Mutex<LruCache>`) | 2.415µs | 42.25µs ± 2.32µs | 4.43ms ± 1.13ms |
+| Moka | 902ns | 389.57µs ± 13.53µs | 13.34ms ± 2.04ms |
+
+![p99 write-pressure benchmark chart](./docs/images/write_pressure_p99_benchmark.png)
+
+**Head-to-head verdicts** (is the gap bigger than the trial-to-trial noise, or just a fluke?):
+
+| Comparison | p99 gap | Combined stddev | Verdict |
+|---|:-:|:-:|---|
+| PulseMap vs Moka | 388.66µs | 13.58µs | PulseMap reliably lower — **427.6x** |
+| PulseMap vs LRU | 41.34µs | 2.36µs | PulseMap reliably lower — **46.4x** |
+| PulseMap vs Simple | 28.19µs | 4.63µs | PulseMap reliably lower — **31.9x** |
+| PulseMap vs QuickCache | 526ns | 99ns | PulseMap reliably lower — **1.6x** (real, but the closest margin of the four) |
+
+**Honest read of these numbers:**
+- Against Moka, the gap is enormous and not close — this is where a background-eviction-thread design under queue backpressure really costs you.
+- Against a naive `Mutex<HashMap>` and a `Mutex`-wrapped `lru::LruCache`, PulseMap wins by a wide margin because both serialize all writers behind one lock; PulseMap and QuickCache don't.
+- Against **QuickCache** — also a lock-free, inline-eviction design — the margin is real (5.3x the combined noise) but modest at 1.6x. Both designs are in the same tier; treat this as "PulseMap is consistently a bit faster here," not "QuickCache is a bad cache."
+- `max` numbers have high stddev across *every* cache tested (a single unlucky scheduler preemption can hit anyone), which is why p99 — not max — is the metric to trust for comparing tail latency.
+
+Full benchmark source (multi-threaded, statistical harness) is in `examples/`.
+
+---
+
+## Memory Footprint (Measured)
+
+Real RSS memory, not theoretical struct sizes. Each `(cache, capacity)` pair
+was measured in its own **fresh child process** (no allocator-arena reuse
+between tests), both **empty** (right after `new(capacity)`) and **filled**
+to 100% capacity — Linux uses lazy page commit, so an allocation that's
+never written to won't show up in RSS even if it was "reserved."
+
+| Cache | Capacity | Empty RSS | Filled RSS | Bytes/entry |
+|---|:-:|:-:|:-:|:-:|
+| **PulseMap** | 100K | 3.16MB | 3.12MB | 32.7B |
+| **PulseMap** | 500K | 12.30MB | 12.30MB | 25.8B |
+| **PulseMap** | 1M | 24.42MB | 24.41MB | **25.6B** |
+| QuickCache | 100K | 0.22MB | 3.90MB | 40.9B |
+| QuickCache | 500K | 0.22MB | 17.83MB | 37.4B |
+| QuickCache | 1M | 0.22MB | 34.35MB | 36.0B |
+| LRU (`lru` crate) | 100K | 0.25MB | 5.28MB | 55.4B |
+| LRU (`lru` crate) | 500K | 1.14MB | 32.37MB | 67.9B |
+| LRU (`lru` crate) | 1M | 2.12MB | 64.55MB | 67.7B |
+| Moka | 100K | 2.29MB | 29.79MB | 312.3B |
+| Moka | 500K | 8.53MB | 145.88MB | 305.9B |
+| Moka | 1M | 16.53MB | 291.12MB | 305.3B |
+| `std::HashMap` (no eviction, reference only) | 1M | 2.20MB | 18.11MB | 19.0B |
+
+**What this shows:**
+- At 1M capacity, PulseMap uses **29% less memory per entry than QuickCache**, **62% less than `lru`**, and **91% less than Moka**.
+- PulseMap's empty and filled RSS are nearly identical (24.42MB → 24.41MB) — memory is committed at `new()` and stays flat. Every other cache tested grows lazily as you insert. If predictable, front-loaded memory is a requirement (embedded, containers with tight memory limits), this is the practically relevant number, not just the average bytes/entry.
+- `std::HashMap`'s 19.0B/entry is lower than PulseMap's, but it's not a fair comparison — it has no eviction, no fixed capacity, and no priority tracking; it's included only as a reference point for "what raw storage with none of PulseMap's features would cost."
+
+---
+
+## Eviction Quality (Hit Rate, Not Speed)
+
+Speed alone doesn't prove an eviction policy is smart — it could just be
+evicting fast and wrong. This measures hit rate under memory pressure:
+capacity fixed at 10% of the key space, Zipfian-distributed access
+(exponent 1.3, a realistic hot/cold pattern), single-threaded so
+lock-contention noise doesn't muddy the comparison between policies. Each
+cache saw the identical access sequence per trial; 5 seeded trials, mean ±
+stddev reported.
+
+Tested across three read/write ratios (80/20, 99/1, and 100%
+cache-fill-on-miss) to confirm the result holds regardless of workload
+shape:
+
+| Cache | Hit Rate (mean ± stddev, consistent across all ratios tested) |
+|---|:-:|
+| **PulseMap** | **96.73% ± 0.01%** |
+| QuickCache | 96.49% ± 0.01% |
+| Moka | 96.40–96.45% ± 0.01% |
+| LRU (`lru` crate) | 95.83% ± 0.01% |
+
+PulseMap's LFU+LRU hybrid produced the highest hit rate of all four caches
+tested, beating Moka's TinyLFU by ~0.3 points and plain LRU by ~0.9 points.
+The gaps are small in absolute terms but far larger than the run-to-run
+noise (stddev ≈ 0.01%), and the ranking was stable across every read/write
+ratio tested — this isn't a workload-shape artifact.
+
+---
+
+## Where PulseMap Fits
+
+Beyond raw insert throughput, three production-shaped workloads were tested
+head-to-head against Moka, QuickCache, `lru`, and a naive `Mutex<HashMap>`:
+(A) an 80/20 read/write mix with Zipfian hot keys — the shape of most real
+caches (DNS, session stores, API caches); (B) large-scale sustained inserts
+with heavy eviction; and (C) extreme contention, where many threads hammer
+a tiny keyspace of just 64 keys (a "hot partition" — a viral user, a
+trending API route).
+
+| Scenario | Winner | Notes |
+|---|---|---|
+| A — Realistic mixed workload (hot-key 80/20) | QuickCache | ~2.8x lower p99 than PulseMap on GET; both hit similar ~91-92% cache hit rates |
+| B — Large-scale sustained inserts | QuickCache | Modestly higher throughput than PulseMap; Moka is ~20x slower here |
+| C — Extreme hot-key contention (64 keys, 8 threads) | **PulseMap** | 2.7x lower p99 than QuickCache, and far more *consistent* — QuickCache's stddev was 20x higher, meaning its tail latency got unpredictable under contention while PulseMap's didn't |
+| D — Eviction quality (hit rate under memory pressure) | **PulseMap** | Highest hit rate of all 4 caches (96.73%), consistent across every read/write ratio tested — see [Eviction Quality](#eviction-quality-hit-rate-not-speed) |
+| Memory footprint at scale | **PulseMap** | 29% less per-entry memory than QuickCache, with flat (non-growing) allocation |
+
+**Practical read:** for general-purpose low-contention caching, QuickCache
+is a strong, slightly faster choice. **PulseMap's specific advantage shows
+up under contention** — many threads repeatedly touching a small, hot set
+of keys — and in memory-constrained environments where a flat, predictable
+allocation matters more than a small latency edge. Rate limiters on popular
+IPs, hot session keys, and trending-content caches are the workloads where
+PulseMap pulls ahead; generic low-contention application caching is closer
+to a coin flip between PulseMap and QuickCache. On top of the latency picture, PulseMap's eviction policy also kept the
+right keys hot more often than every alternative tested — so even in the
+low-contention case where QuickCache is a bit faster, PulseMap's cache
+hit rate was still the highest of the four.
+
+---
+
 ## Architecture
 
 ```
@@ -391,6 +528,7 @@ pulse_map_free(map);
 ## Known Limitations
 
 - Lookup is ~1.9x slower than `quick_cache` — serialization trade-off for `no_std`/FFI
+- On low-contention, general-purpose read/write mixed workloads, QuickCache is modestly faster (see [Where PulseMap Fits](#where-pulsemap-fits)) — PulseMap's edge is specifically under contention and in memory footprint, not universal
 - TTL is insertion-count based, not wall-clock time
 - No async API yet
 
