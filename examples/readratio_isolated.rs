@@ -20,9 +20,9 @@
 //! Run:
 //!   cargo run --release --example readratio_isolated
 
-use pulse_map::ShardedPulseMap;
-use moka::sync::Cache as MokaCache;
 use lru::LruCache;
+use moka::sync::Cache as MokaCache;
+use pulse_map::ShardedPulseMap;
 use quick_cache::sync::Cache as QuickCache;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
@@ -37,35 +37,61 @@ trait BenchCache {
 
 struct PulseAdapter(ShardedPulseMap<u32, u32>);
 impl BenchCache for PulseAdapter {
-    fn insert(&mut self, k: u32, v: u32) { self.0.insert(k, v); }
-    fn get(&mut self, k: u32) -> Option<u32> { self.0.get(&k) }
-    fn name(&self) -> &'static str { "PulseMap" }
+    fn insert(&mut self, k: u32, v: u32) {
+        self.0.insert(k, v);
+    }
+    fn get(&mut self, k: u32) -> Option<u32> {
+        self.0.get(&k)
+    }
+    fn name(&self) -> &'static str {
+        "PulseMap"
+    }
 }
 
 struct MokaAdapter(MokaCache<u32, u32>);
 impl BenchCache for MokaAdapter {
-    fn insert(&mut self, k: u32, v: u32) { self.0.insert(k, v); }
-    fn get(&mut self, k: u32) -> Option<u32> { self.0.get(&k) }
-    fn name(&self) -> &'static str { "Moka" }
+    fn insert(&mut self, k: u32, v: u32) {
+        self.0.insert(k, v);
+    }
+    fn get(&mut self, k: u32) -> Option<u32> {
+        self.0.get(&k)
+    }
+    fn name(&self) -> &'static str {
+        "Moka"
+    }
 }
 
 struct QuickAdapter(QuickCache<u32, u32>);
 impl BenchCache for QuickAdapter {
-    fn insert(&mut self, k: u32, v: u32) { self.0.insert(k, v); }
-    fn get(&mut self, k: u32) -> Option<u32> { self.0.get(&k) }
-    fn name(&self) -> &'static str { "QuickCache" }
+    fn insert(&mut self, k: u32, v: u32) {
+        self.0.insert(k, v);
+    }
+    fn get(&mut self, k: u32) -> Option<u32> {
+        self.0.get(&k)
+    }
+    fn name(&self) -> &'static str {
+        "QuickCache"
+    }
 }
 
 struct LruAdapter(LruCache<u32, u32>);
 impl BenchCache for LruAdapter {
-    fn insert(&mut self, k: u32, v: u32) { self.0.put(k, v); }
-    fn get(&mut self, k: u32) -> Option<u32> { self.0.get(&k).copied() }
-    fn name(&self) -> &'static str { "LRU" }
+    fn insert(&mut self, k: u32, v: u32) {
+        self.0.put(k, v);
+    }
+    fn get(&mut self, k: u32) -> Option<u32> {
+        self.0.get(&k).copied()
+    }
+    fn name(&self) -> &'static str {
+        "LRU"
+    }
 }
 
 fn make_caches(capacity: usize) -> Vec<Box<dyn BenchCache>> {
     vec![
-        Box::new(PulseAdapter(ShardedPulseMap::<u32, u32>::new(capacity / 64))),
+        Box::new(PulseAdapter(ShardedPulseMap::<u32, u32>::new(
+            capacity / 64,
+        ))),
         Box::new(MokaAdapter(
             MokaCache::builder()
                 .max_capacity(capacity as u64)
@@ -91,7 +117,14 @@ fn mean_std(vals: &[f64]) -> (f64, f64) {
 /// On a GET miss OR when the coin flip picks a "write", we insert —
 /// this mirrors realistic behavior: reads that miss still populate the
 /// cache, and explicit writes update it too.
-fn run_hit_rate_test(capacity: usize, key_space: u64, zipf_exp: f64, read_ratio: f64, total_ops: u32, trials: usize) {
+fn run_hit_rate_test(
+    capacity: usize,
+    key_space: u64,
+    zipf_exp: f64,
+    read_ratio: f64,
+    total_ops: u32,
+    trials: usize,
+) {
     struct Result {
         name: &'static str,
         hit_rates: Vec<f64>,
@@ -125,7 +158,10 @@ fn run_hit_rate_test(capacity: usize, key_space: u64, zipf_exp: f64, read_ratio:
             let name = cache.name();
             match results.iter_mut().find(|r| r.name == name) {
                 Some(r) => r.hit_rates.push(hit_rate),
-                None => results.push(Result { name, hit_rates: vec![hit_rate] }),
+                None => results.push(Result {
+                    name,
+                    hit_rates: vec![hit_rate],
+                }),
             }
         }
     }
@@ -159,7 +195,9 @@ fn main() {
     println!("\n--- 99% GET / 1% INSERT (matches Scenario E's ratio) ---");
     run_hit_rate_test(CAPACITY, KEY_SPACE, ZIPF_EXP, 0.99, TOTAL_OPS, TRIALS);
 
-    println!("\n--- 100% GET-OR-INSERT-ON-MISS (matches Scenario D exactly, as a sanity check) ---");
+    println!(
+        "\n--- 100% GET-OR-INSERT-ON-MISS (matches Scenario D exactly, as a sanity check) ---"
+    );
     run_hit_rate_test(CAPACITY, KEY_SPACE, ZIPF_EXP, 1.0, TOTAL_OPS, TRIALS);
 
     println!("\n================================================================");

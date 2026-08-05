@@ -20,12 +20,12 @@
 //! Run:
 //!   cargo run --release --example quality_and_readheavy
 
-use pulse_map::ShardedPulseMap;
-use moka::sync::Cache as MokaCache;
 use lru::LruCache;
+use moka::sync::Cache as MokaCache;
+use pulse_map::ShardedPulseMap;
 use quick_cache::sync::Cache as QuickCache;
-use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
+use rand::{Rng, SeedableRng};
 use rand_distr::{Distribution, Zipf};
 use std::num::NonZeroUsize;
 use std::sync::{Arc, Barrier, Mutex};
@@ -44,44 +44,72 @@ trait BenchCache: Send + Sync + 'static {
 
 struct PulseAdapter(Arc<ShardedPulseMap<u32, u32>>);
 impl BenchCache for PulseAdapter {
-    fn insert(&self, k: u32, v: u32) { self.0.insert(k, v); }
-    fn get(&self, k: u32) -> Option<u32> { self.0.get(&k) }
-    fn name(&self) -> &'static str { "PulseMap" }
+    fn insert(&self, k: u32, v: u32) {
+        self.0.insert(k, v);
+    }
+    fn get(&self, k: u32) -> Option<u32> {
+        self.0.get(&k)
+    }
+    fn name(&self) -> &'static str {
+        "PulseMap"
+    }
 }
 
 struct MokaAdapter(Arc<MokaCache<u32, u32>>);
 impl BenchCache for MokaAdapter {
-    fn insert(&self, k: u32, v: u32) { self.0.insert(k, v); }
-    fn get(&self, k: u32) -> Option<u32> { self.0.get(&k) }
-    fn name(&self) -> &'static str { "Moka" }
+    fn insert(&self, k: u32, v: u32) {
+        self.0.insert(k, v);
+    }
+    fn get(&self, k: u32) -> Option<u32> {
+        self.0.get(&k)
+    }
+    fn name(&self) -> &'static str {
+        "Moka"
+    }
 }
 
 struct QuickAdapter(Arc<QuickCache<u32, u32>>);
 impl BenchCache for QuickAdapter {
-    fn insert(&self, k: u32, v: u32) { self.0.insert(k, v); }
-    fn get(&self, k: u32) -> Option<u32> { self.0.get(&k) }
-    fn name(&self) -> &'static str { "QuickCache" }
+    fn insert(&self, k: u32, v: u32) {
+        self.0.insert(k, v);
+    }
+    fn get(&self, k: u32) -> Option<u32> {
+        self.0.get(&k)
+    }
+    fn name(&self) -> &'static str {
+        "QuickCache"
+    }
 }
 
 struct LruAdapter(Arc<Mutex<LruCache<u32, u32>>>);
 impl BenchCache for LruAdapter {
-    fn insert(&self, k: u32, v: u32) { self.0.lock().unwrap().put(k, v); }
-    fn get(&self, k: u32) -> Option<u32> { self.0.lock().unwrap().get(&k).copied() }
-    fn name(&self) -> &'static str { "LRU" }
+    fn insert(&self, k: u32, v: u32) {
+        self.0.lock().unwrap().put(k, v);
+    }
+    fn get(&self, k: u32) -> Option<u32> {
+        self.0.lock().unwrap().get(&k).copied()
+    }
+    fn name(&self) -> &'static str {
+        "LRU"
+    }
 }
 
 fn quality_caches(capacity: usize) -> Vec<Box<dyn BenchCache>> {
     // Simple/Mutex<HashMap> excluded here on purpose — it has no eviction
     // policy at all, so a "hit rate" comparison against it isn't meaningful.
     vec![
-        Box::new(PulseAdapter(Arc::new(ShardedPulseMap::<u32, u32>::new(capacity / 64)))),
+        Box::new(PulseAdapter(Arc::new(ShardedPulseMap::<u32, u32>::new(
+            capacity / 64,
+        )))),
         Box::new(MokaAdapter(Arc::new(
             MokaCache::builder()
                 .max_capacity(capacity as u64)
                 .initial_capacity(capacity)
                 .build(),
         ))),
-        Box::new(QuickAdapter(Arc::new(QuickCache::<u32, u32>::new(capacity)))),
+        Box::new(QuickAdapter(Arc::new(QuickCache::<u32, u32>::new(
+            capacity,
+        )))),
         Box::new(LruAdapter(Arc::new(Mutex::new(LruCache::<u32, u32>::new(
             NonZeroUsize::new(capacity).unwrap(),
         ))))),
@@ -163,7 +191,10 @@ fn scenario_d() {
             let name = cache.name();
             match results.iter_mut().find(|r| r.name == name) {
                 Some(r) => r.hit_rates.push(hit_rate),
-                None => results.push(Result { name, hit_rates: vec![hit_rate] }),
+                None => results.push(Result {
+                    name,
+                    hit_rates: vec![hit_rate],
+                }),
             }
         }
     }
@@ -280,7 +311,10 @@ fn scenario_e() {
         }
     }
 
-    println!("{:<12} {:>14} {:>18} {:>12}", "Cache", "Total (ms)", "GET p99", "Hit rate");
+    println!(
+        "{:<12} {:>14} {:>18} {:>12}",
+        "Cache", "Total (ms)", "GET p99", "Hit rate"
+    );
     println!("{}", "-".repeat(62));
     for r in &results {
         let (t_mean, _) = mean_std(&r.total_ms);
@@ -288,7 +322,11 @@ fn scenario_e() {
         let (hit_mean, _) = mean_std(&r.hit_rate);
         println!(
             "{:<12} {:>11.1}ms {:>14} ± {:<9} {:>10.1}%",
-            r.name, t_mean, fmt_ns(g_mean), fmt_ns(g_std), hit_mean
+            r.name,
+            t_mean,
+            fmt_ns(g_mean),
+            fmt_ns(g_std),
+            hit_mean
         );
     }
 }

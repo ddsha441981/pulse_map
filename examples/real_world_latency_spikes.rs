@@ -18,9 +18,9 @@
 //! Run:
 //!   cargo run --release --example real_world_latency_spikes_v3
 
-use pulse_map::ShardedPulseMap;
-use moka::sync::Cache as MokaCache;
 use lru::LruCache;
+use moka::sync::Cache as MokaCache;
+use pulse_map::ShardedPulseMap;
 use quick_cache::sync::Cache as QuickCache;
 use std::collections::HashMap;
 use std::num::NonZeroUsize;
@@ -169,10 +169,18 @@ fn verdict(a: &Stats, b: &Stats) {
         fmt_ns(combined_std)
     );
     if combined_std == 0.0 || gap > combined_std {
-        let winner = if a.p99_mean < b.p99_mean { a.name } else { b.name };
-        println!("  -> {winner} is reliably lower p99 across {NUM_TRIALS} trials (gap exceeds noise).");
+        let winner = if a.p99_mean < b.p99_mean {
+            a.name
+        } else {
+            b.name
+        };
+        println!(
+            "  -> {winner} is reliably lower p99 across {NUM_TRIALS} trials (gap exceeds noise)."
+        );
     } else {
-        println!("  -> statistical tie: gap is within run-to-run noise, don't claim a winner here.");
+        println!(
+            "  -> statistical tie: gap is within run-to-run noise, don't claim a winner here."
+        );
     }
 }
 
@@ -238,7 +246,6 @@ fn main() {
     verdict(&pulse, &lru);
     verdict(&pulse, &simple);
 }
-
 
 //============================================
 
@@ -461,5 +468,3 @@ fn main() {
 //     println!("  LRU        : {:.1}x", lru_max.as_nanos() as f64 / pulse_max.as_nanos() as f64);
 //     println!("  Simple     : {:.1}x", simple_max.as_nanos() as f64 / pulse_max.as_nanos() as f64);
 // }
-
-

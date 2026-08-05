@@ -21,9 +21,9 @@
 //! Run:
 //!   cargo run --release --example memory_baseline
 
-use pulse_map::ShardedPulseMap;
-use moka::sync::Cache as MokaCache;
 use lru::LruCache;
+use moka::sync::Cache as MokaCache;
+use pulse_map::ShardedPulseMap;
 use quick_cache::sync::Cache as QuickCache;
 use std::collections::HashMap;
 use std::env;
@@ -189,5 +189,7 @@ fn main() {
     println!("- 'Filled RSS' is after inserting up to 100% capacity — the honest steady-state");
     println!("  number, since Linux won't count untouched allocated pages toward RSS.");
     println!("- 'Bytes/entry' = filled RSS / capacity. Compare this directly against README");
-    println!("  claims like '14B packed slot vs 48B LRU pointers' — this is real, not theoretical.");
+    println!(
+        "  claims like '14B packed slot vs 48B LRU pointers' — this is real, not theoretical."
+    );
 }
