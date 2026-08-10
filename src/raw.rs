@@ -45,10 +45,12 @@ pub struct PulseMapRaw {
     default_ttl: u32,
 }
 
-// Safety: PulseMapRaw uses interior mutability only for priority metadata updates
-// (frequency/recency counters). The actual key-value data is never mutated during get().
+// Safety: PulseMapRaw can be safely transferred between threads (Send),
+// but it must NOT be shared across threads (Sync) because get() performs
+// unsynchronized interior mutation of MetaWord priority counters via raw
+// pointer casts. For concurrent access, use ConcurrentPulseMap (with
+// per-bucket spinlocks) or ShardedPulseMap (with sharded locking).
 unsafe impl Send for PulseMapRaw {}
-unsafe impl Sync for PulseMapRaw {}
 
 impl PulseMapRaw {
     /// Create a new PulseMapRaw with the given number of buckets.
