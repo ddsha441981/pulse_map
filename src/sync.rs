@@ -367,6 +367,9 @@ impl<K: PulseKey, V: PulseValue> ConcurrentPulseMap<K, V> {
     }
 
     /// Thread-safe lookup. Returns owned `Option<V>`.
+    ///
+    /// Optimized: inline keys skip the slab_pool mutex entirely,
+    /// avoiding a global lock on the hot read path.
     pub fn get(&self, key: &K) -> Option<V> {
         key.with_key_bytes(|key_bytes| {
             let hr = compute_hash(key_bytes);
@@ -384,15 +387,39 @@ impl<K: PulseKey, V: PulseValue> ConcurrentPulseMap<K, V> {
                 let slot_idx = m.trailing_zeros() as u8;
                 m &= m - 1;
                 let slot = &bucket.slots[slot_idx as usize];
-                let slab = state.slab_pool.lock().unwrap();
-                if slot.matches_key(key_bytes, &hr, &slab) {
+
+                // Optimization: inline keys (mode=0) don't need the slab lock at all.
+                let matched = if slot.get_mode() == 0 {
+                    slot.inline_key() == key_bytes
+                } else {
+                    // Slab mode: check fingerprint first (no lock needed),
+                    // only acquire slab lock for the rare full-key comparison.
+                    if slot.data[0] & 0x7F != hr.ext_fp_hi {
+                        false
+                    } else {
+                        let mut fp_bytes = [0u8; 4];
+                        fp_bytes.copy_from_slice(&slot.data[1..5]);
+                        if u32::from_le_bytes(fp_bytes) != hr.ext_fp {
+                            false
+                        } else {
+                            let slab = state.slab_pool.lock().unwrap();
+                            slab.get(slot.slab_idx()).key() == key_bytes
+                        }
+                    }
+                };
+
+                if matched {
                     // Check TTL expiry
                     if self.is_expired(&state, idx, slot_idx) {
                         return None;
                     }
                     bucket.meta.on_access(slot_idx);
-                    let val_bytes = slot.get_value(&slab).to_vec();
-                    drop(slab);
+                    let val_bytes = if slot.get_mode() == 0 {
+                        slot.inline_value().to_vec()
+                    } else {
+                        let slab = state.slab_pool.lock().unwrap();
+                        slot.get_value(&slab).to_vec()
+                    };
                     return V::from_bytes(&val_bytes);
                 }
             }
