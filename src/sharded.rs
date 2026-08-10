@@ -83,9 +83,9 @@ impl<K: PulseKey, V: PulseValue> ShardedPulseMap<K, V> {
     /// Thread-safe insert with a per-entry TTL override.
     ///
     /// - `ttl = 0`: use the map's default TTL
-    /// - `ttl = u32::MAX`: this entry never expires
+    /// - `ttl = u64::MAX`: this entry never expires
     /// - `ttl = N`: this entry expires after N insertions
-    pub fn insert_ttl(&self, key: K, value: V, ttl: u32) {
+    pub fn insert_ttl(&self, key: K, value: V, ttl: u64) {
         let idx = key.with_key_bytes(Self::shard_for);
         self.shards[idx].insert_ttl(key, value, ttl);
     }
@@ -128,7 +128,7 @@ impl<K: PulseKey, V: PulseValue> ShardedPulseMap<K, V> {
     ///
     /// Each shard counts its own epochs, so an entry expires after `ttl`
     /// inserts landing in ITS shard (~`ttl × 16` inserts map-wide).
-    pub fn set_ttl(&self, ttl: u32) {
+    pub fn set_ttl(&self, ttl: u64) {
         for shard in self.shards.iter() {
             shard.set_ttl(ttl);
         }
@@ -136,12 +136,12 @@ impl<K: PulseKey, V: PulseValue> ShardedPulseMap<K, V> {
 
     /// Current TTL setting (same across all shards).
     #[inline]
-    pub fn get_ttl(&self) -> u32 {
+    pub fn get_ttl(&self) -> u64 {
         self.shards[0].get_ttl()
     }
 
     /// Highest epoch across shards (the most active shard's insert count).
-    pub fn current_epoch(&self) -> u32 {
+    pub fn current_epoch(&self) -> u64 {
         self.shards
             .iter()
             .map(|s| s.current_epoch())

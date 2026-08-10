@@ -382,9 +382,9 @@ impl<K: PulseKey, V: PulseValue> TypedPulseMap<K, V> {
     /// Insert a key-value pair with a per-entry TTL override.
     ///
     /// - `ttl = 0`: use the map's default TTL (`set_ttl()`)
-    /// - `ttl = u32::MAX`: this entry never expires
+    /// - `ttl = u64::MAX`: this entry never expires
     /// - `ttl = N`: this entry expires after N insertions
-    pub fn insert_ttl(&mut self, key: K, value: V, ttl: u32) {
+    pub fn insert_ttl(&mut self, key: K, value: V, ttl: u64) {
         let kb = key.to_bytes();
         let vb = value.to_bytes();
         self.raw.insert_ttl(kb.as_ref(), vb.as_ref(), ttl);
@@ -457,19 +457,19 @@ impl<K: PulseKey, V: PulseValue> TypedPulseMap<K, V> {
     /// map.insert(3, 300); // this is the 3rd insert, key=1 may expire now
     /// ```
     #[inline]
-    pub fn set_ttl(&mut self, ttl_epochs: u32) {
+    pub fn set_ttl(&mut self, ttl_epochs: u64) {
         self.raw.set_ttl(ttl_epochs);
     }
 
     /// Returns the current TTL setting (0 = disabled).
     #[inline]
-    pub fn get_ttl(&self) -> u32 {
+    pub fn get_ttl(&self) -> u64 {
         self.raw.get_ttl()
     }
 
     /// Returns the current epoch counter (total insertions).
     #[inline]
-    pub fn current_epoch(&self) -> u32 {
+    pub fn current_epoch(&self) -> u64 {
         self.raw.current_epoch()
     }
 
@@ -1101,7 +1101,7 @@ mod tests {
     fn test_per_entry_ttl_never_expire() {
         let mut map = PulseMap::new(64);
         map.set_ttl(2); // global: expire after 2
-        map.insert_ttl(b"forever", b"val", u32::MAX); // never expires
+        map.insert_ttl(b"forever", b"val", u64::MAX); // never expires
         map.insert(b"normal", b"val"); // uses global TTL = 2
 
         // 3 inserts → normal should expire, forever should survive
@@ -1111,7 +1111,7 @@ mod tests {
         assert_eq!(
             map.get(b"forever"),
             Some(&b"val"[..]),
-            "u32::MAX entry must never expire"
+            "u64::MAX entry must never expire"
         );
         assert_eq!(map.get(b"normal"), None, "normal entry should have expired");
     }
@@ -1140,7 +1140,7 @@ mod tests {
         map.set_ttl(100); // global default
 
         map.insert_ttl(1, 100, 3); // expires after 3
-        map.insert_ttl(2, 200, u32::MAX); // never expires
+        map.insert_ttl(2, 200, u64::MAX); // never expires
         map.insert(3, 300); // uses global TTL = 100
 
         // 4 inserts to expire key=1
@@ -1164,7 +1164,7 @@ mod tests {
         map.set_ttl(100);
 
         map.insert_ttl(1, 100, 3);
-        map.insert_ttl(2, 200, u32::MAX);
+        map.insert_ttl(2, 200, u64::MAX);
 
         for i in 10..14u32 {
             map.insert(i, i);

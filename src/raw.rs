@@ -19,9 +19,9 @@ use alloc::vec::Vec;
 #[derive(Clone, Copy, Default)]
 pub(crate) struct SlotTTL {
     /// Epoch at which this entry was inserted/last updated.
-    pub epoch: u32,
-    /// Per-entry TTL. 0 = use default_ttl, u32::MAX = never expire.
-    pub ttl: u32,
+    pub epoch: u64,
+    /// Per-entry TTL. 0 = use default_ttl, u64::MAX = never expire.
+    pub ttl: u64,
 }
 
 /// Raw byte-level cache-line hash table with zero-cost eviction and optional TTL.
@@ -40,9 +40,9 @@ pub struct PulseMapRaw {
     /// Per-slot TTL data: insertion epoch + per-entry TTL override.
     slots_ttl: Vec<SlotTTL>,
     /// Monotonically increasing counter. Incremented on every insert.
-    current_epoch: u32,
+    current_epoch: u64,
     /// Default TTL in insertion epochs. 0 = disabled. Per-entry TTL overrides this.
-    default_ttl: u32,
+    default_ttl: u64,
 }
 
 // Safety: PulseMapRaw uses interior mutability only for priority metadata updates
@@ -86,19 +86,19 @@ impl PulseMapRaw {
     /// assert_eq!(map.get(b"key"), Some(&b"val"[..]));
     /// ```
     #[inline]
-    pub fn set_ttl(&mut self, ttl_epochs: u32) {
+    pub fn set_ttl(&mut self, ttl_epochs: u64) {
         self.default_ttl = ttl_epochs;
     }
 
     /// Returns the current TTL setting (0 = disabled).
     #[inline]
-    pub fn get_ttl(&self) -> u32 {
+    pub fn get_ttl(&self) -> u64 {
         self.default_ttl
     }
 
     /// Returns the current epoch counter (total insertions so far).
     #[inline]
-    pub fn current_epoch(&self) -> u32 {
+    pub fn current_epoch(&self) -> u64 {
         self.current_epoch
     }
 
@@ -111,7 +111,7 @@ impl PulseMapRaw {
         } else {
             entry.ttl
         };
-        if effective_ttl == 0 || effective_ttl == u32::MAX {
+        if effective_ttl == 0 || effective_ttl == u64::MAX {
             return false;
         }
         self.current_epoch.wrapping_sub(entry.epoch) > effective_ttl
@@ -119,7 +119,7 @@ impl PulseMapRaw {
 
     /// Stamp a slot's insertion epoch and per-entry TTL.
     #[inline]
-    fn stamp_slot_ttl(&mut self, bucket_idx: usize, slot_idx: u8, ttl: u32) {
+    fn stamp_slot_ttl(&mut self, bucket_idx: usize, slot_idx: u8, ttl: u64) {
         self.slots_ttl[bucket_idx * 4 + slot_idx as usize] = SlotTTL {
             epoch: self.current_epoch,
             ttl,
@@ -134,14 +134,14 @@ impl PulseMapRaw {
     /// Insert with a per-entry TTL override.
     ///
     /// - `ttl = 0`: use the map's default TTL (`set_ttl()`)
-    /// - `ttl = u32::MAX`: this entry never expires
+    /// - `ttl = u64::MAX`: this entry never expires
     /// - `ttl = N`: this entry expires after N insertions
-    pub fn insert_ttl(&mut self, key: &[u8], value: &[u8], ttl: u32) {
+    pub fn insert_ttl(&mut self, key: &[u8], value: &[u8], ttl: u64) {
         self.insert_internal(key, value, ttl);
     }
 
     /// Internal insert with TTL parameter. `ttl = 0` means use `default_ttl`.
-    fn insert_internal(&mut self, key: &[u8], value: &[u8], ttl: u32) {
+    fn insert_internal(&mut self, key: &[u8], value: &[u8], ttl: u64) {
         self.current_epoch = self.current_epoch.wrapping_add(1);
 
         let hr = compute_hash(key);

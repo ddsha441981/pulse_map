@@ -33,7 +33,7 @@ fn run_ttl_expiry() {
     map.insert_ttl(
         "immortal_key".to_string(),
         "lives_forever".to_string(),
-        u32::MAX,
+        u64::MAX,
     );
 
     for i in 0..11 {
