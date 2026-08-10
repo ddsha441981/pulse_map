@@ -76,10 +76,19 @@ impl MetaWord {
     /// Returns a bitmask of slots where H2 matches AND state == Full.
     /// Bit i set = slot i is a potential match.
     ///
-    /// Uses branchless scalar bit arithmetic — pure ALU, no branches.
+    /// Dispatches to SIMD (simd.rs) when `simd` feature is enabled on x86_64.
+    /// Benchmarks confirm the SSE2 path is faster than scalar in release builds.
     #[inline]
     pub fn match_mask(&self, h2: u8) -> u8 {
-        self.match_mask_branchless(h2)
+        #[cfg(all(target_arch = "x86_64", feature = "simd"))]
+        {
+            // Safety: SSE2 is guaranteed on all x86_64 CPUs
+            unsafe { crate::simd::match_mask_simd(self.0, h2) }
+        }
+        #[cfg(not(all(target_arch = "x86_64", feature = "simd")))]
+        {
+            self.match_mask_branchless(h2)
+        }
     }
 
     /// Branchless scalar match — no if-statements, pure bit arithmetic.
