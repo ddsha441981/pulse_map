@@ -1,0 +1,36 @@
+   Compiling pulse_map v0.6.1 (/home/ddsha441981/Desktop/plusmap/pulse_map)
+    Finished `release` profile [optimized] target(s) in 12.23s
+     Running `target/release/examples/memory_baseline`
+💾 MEMORY BASELINE BENCHMARK 💾
+Each (cache, capacity) pair runs in its own fresh process — no cross-test contamination.
+
+Cache            Capacity     Empty RSS (MB)    Filled RSS (MB)    Bytes/entry
+------------------------------------------------------------------------------
+pulsemap           100000             4.17MB             4.17MB         43.7B
+pulsemap           500000            16.37MB            16.29MB         34.2B
+pulsemap          1000000            32.46MB            32.41MB         34.0B
+
+quickcache         100000             0.24MB             3.95MB         41.4B
+quickcache         500000             0.22MB            17.97MB         37.7B
+quickcache        1000000             0.22MB            33.85MB         35.5B
+
+lru                100000             0.17MB             5.29MB         55.5B
+lru                500000             1.04MB            32.34MB         67.8B
+lru               1000000             2.07MB            64.64MB         67.8B
+
+simple             100000             0.25MB             1.23MB         12.9B
+simple             500000             1.13MB             9.15MB         19.2B
+simple            1000000             2.21MB            18.11MB         19.0B
+
+moka               100000             2.22MB            29.68MB        311.2B
+moka               500000             8.54MB           145.81MB        305.8B
+moka              1000000            16.46MB           291.17MB        305.3B
+
+Notes:
+- 'Empty RSS' is the footprint right after new(capacity), before any inserts.
+  Fixed-capacity structures that pre-allocate and zero their storage (PulseMap,
+  quick_cache) will show most of their footprint here already.
+- 'Filled RSS' is after inserting up to 100% capacity — the honest steady-state
+  number, since Linux won't count untouched allocated pages toward RSS.
+- 'Bytes/entry' = filled RSS / capacity. Compare this directly against README
+  claims like '14B packed slot vs 48B LRU pointers' — this is real, not theoretical.

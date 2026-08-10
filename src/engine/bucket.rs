@@ -15,7 +15,8 @@ use crate::engine::meta::MetaWord;
 use crate::engine::slot::Slot;
 
 /// A 64-byte cache-line-aligned bucket containing metadata and 4 slots.
-#[derive(Clone, Copy)]
+///
+/// Note: `Bucket` is not `Copy` or `Clone` because `MetaWord` uses `AtomicU64`.
 #[repr(C, align(64))]
 pub struct Bucket {
     pub meta: MetaWord,
@@ -25,7 +26,7 @@ pub struct Bucket {
 impl Bucket {
     /// Empty bucket.
     #[inline]
-    pub const fn empty() -> Self {
+    pub fn empty() -> Self {
         Self {
             meta: MetaWord::empty(),
             slots: [Slot::empty(); 4],
