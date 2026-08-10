@@ -65,13 +65,12 @@ impl<K: PulseKey, V: PulseValue> ShardedPulseMap<K, V> {
 
     /// Pick the shard for a key.
     ///
-    /// Uses the TOP 4 bits of the hash: bucket selection inside a shard uses
-    /// the LOW bits (`h1 & bucket_mask`), so sharding on `h1 % 16` would make
-    /// every key in a shard share its low bits and hit only 1/16th of the
-    /// shard's buckets.
+    /// Uses bits 14-17 of the hash to avoid overlapping with:
+    ///   - `h2` fingerprint (bits 57-63) — preserves full 7-bit entropy
+    ///   - bucket_mask (low bits 0-N) — avoids clustering within shards
     #[inline]
     fn shard_for(key_bytes: &[u8]) -> usize {
-        (compute_hash(key_bytes).h1 >> 60) as usize & (NUM_SHARDS - 1)
+        (compute_hash(key_bytes).h1 >> 14) as usize & (NUM_SHARDS - 1)
     }
 
     /// Thread-safe insert.
