@@ -485,7 +485,7 @@ impl<K: PulseKey, V: PulseValue> ConcurrentPulseMap<K, V> {
     ///
     /// `new_num_buckets` is rounded up to the next power of 2.
     pub fn resize(&self, new_num_buckets: usize) {
-        let new_actual = new_num_buckets.max(1).next_power_of_two();
+        let mut new_actual = new_num_buckets.max(1).next_power_of_two();
 
         // Acquire write lock — blocks ALL reads and writes
         let mut state = self.inner.write().unwrap();
@@ -495,17 +495,19 @@ impl<K: PulseKey, V: PulseValue> ConcurrentPulseMap<K, V> {
             return;
         }
 
-        // Create new bucket array
-        let new_buckets: Vec<UnsafeCell<Bucket>> = (0..new_actual)
-            .map(|_| UnsafeCell::new(Bucket::empty()))
-            .collect();
-        let new_locks = BucketLocks::new(new_actual);
-        let new_mask = new_actual - 1;
-        let new_slab = Mutex::new(SlabPool::new());
+        // Collect all live entries with their TTL data before rehashing.
+        // This decouples extraction from insertion so we can retry with a
+        // larger capacity if bucket collisions cause overflow.
+        struct EntryData {
+            key_bytes: Vec<u8>,
+            val_bytes: Vec<u8>,
+            slot_ttl: SlotTTL,
+        }
 
-        // Rehash all entries from old buckets into new buckets
-        let mut new_count = 0usize;
-        for bucket_cell in state.buckets.iter() {
+        let old_epochs = state.epochs.lock().unwrap().clone();
+        let mut entries: Vec<EntryData> = Vec::new();
+
+        for (bucket_idx, bucket_cell) in state.buckets.iter().enumerate() {
             let bucket = unsafe { &*bucket_cell.get() };
             for slot_idx in 0..4u8 {
                 if bucket.meta.get_state(slot_idx) != SlotState::Full {
@@ -513,8 +515,6 @@ impl<K: PulseKey, V: PulseValue> ConcurrentPulseMap<K, V> {
                 }
                 let slot = &bucket.slots[slot_idx as usize];
 
-                // Extract key and value bytes from the slot
-                let _hr_from_h2 = bucket.meta.get_h2(slot_idx);
                 let slab = state.slab_pool.lock().unwrap();
                 let key_bytes = slot.get_key_bytes(&slab).to_vec();
                 let val_bytes = slot.get_value_bytes(&slab).to_vec();
@@ -524,40 +524,77 @@ impl<K: PulseKey, V: PulseValue> ConcurrentPulseMap<K, V> {
                     continue;
                 }
 
-                // Rehash into new bucket
-                let hr = compute_hash(&key_bytes);
+                // Preserve the original TTL data for this slot
+                let ttl_idx = bucket_idx * 4 + slot_idx as usize;
+                let slot_ttl = if ttl_idx < old_epochs.len() {
+                    old_epochs[ttl_idx]
+                } else {
+                    SlotTTL::default()
+                };
+
+                entries.push(EntryData {
+                    key_bytes,
+                    val_bytes,
+                    slot_ttl,
+                });
+            }
+        }
+
+        // Retry loop: if any entry can't find a free slot, double the
+        // capacity and try again. This guarantees zero data loss.
+        loop {
+            let new_mask = new_actual - 1;
+            let new_buckets: Vec<UnsafeCell<Bucket>> = (0..new_actual)
+                .map(|_| UnsafeCell::new(Bucket::empty()))
+                .collect();
+            let new_slab = Mutex::new(SlabPool::new());
+            let mut new_epochs = vec![SlotTTL::default(); new_actual * 4];
+            let mut new_count = 0usize;
+            let mut overflow = false;
+
+            for entry in entries.iter() {
+                let hr = compute_hash(&entry.key_bytes);
                 let new_idx = (hr.h1 as usize) & new_mask;
                 let new_bucket = unsafe { &mut *new_buckets[new_idx].get() };
 
                 if let Some(free) = new_bucket.meta.find_free_slot() {
                     let new_slot = &mut new_bucket.slots[free as usize];
-                    if key_bytes.len() <= 6 && val_bytes.len() <= 7 {
-                        new_slot.set_inline(&key_bytes, &val_bytes);
+                    if entry.key_bytes.len() <= 6 && entry.val_bytes.len() <= 7 {
+                        new_slot.set_inline(&entry.key_bytes, &entry.val_bytes);
                     } else {
                         let mut slab = new_slab.lock().unwrap();
-                        let idx = slab.alloc(&key_bytes, &val_bytes);
+                        let idx = slab.alloc(&entry.key_bytes, &entry.val_bytes);
                         new_slot.set_slab(hr.ext_fp_hi, hr.ext_fp, idx);
                     }
                     new_bucket.meta.set_state(free, SlotState::Full);
                     new_bucket.meta.set_h2(free, hr.h2);
                     new_bucket.meta.on_insert(free);
+
+                    // Migrate TTL data to the new slot position
+                    new_epochs[new_idx * 4 + free as usize] = entry.slot_ttl;
                     new_count += 1;
+                } else {
+                    // Bucket overflow — double capacity and retry
+                    overflow = true;
+                    break;
                 }
-                // If new bucket is full, entry is lost (eviction during resize)
             }
+
+            if overflow {
+                new_actual *= 2;
+                continue;
+            }
+
+            // Success — swap state
+            state.buckets = new_buckets;
+            state.locks = BucketLocks::new(new_actual);
+            state.slab_pool = new_slab;
+            state.num_buckets = new_actual;
+            state.bucket_mask = new_mask;
+            *state.epochs.lock().unwrap() = new_epochs;
+            self.count.store(new_count, Ordering::Relaxed);
+            break;
         }
-
-        // Swap state
-        state.buckets = new_buckets;
-        state.locks = new_locks;
-        state.slab_pool = new_slab;
-        state.num_buckets = new_actual;
-        state.bucket_mask = new_mask;
-        // Rebuild epochs for new bucket count (all fresh — old epochs are no longer valid)
-        *state.epochs.lock().unwrap() = vec![SlotTTL::default(); new_actual * 4];
-
-        // Update count to actual rehashed entries
-        self.count.store(new_count, Ordering::Relaxed);
     }
 
     // ── Stats ──
