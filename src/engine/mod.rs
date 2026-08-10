@@ -10,6 +10,7 @@
 //! - `SlabPool`: Arena allocator for variable-length entries
 //! - `hash`: wyhash-based hash splitting
 
+pub mod access_buffer;
 pub mod bucket;
 pub mod hash;
 pub mod meta;

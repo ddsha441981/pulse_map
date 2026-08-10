@@ -26,6 +26,7 @@ use std::marker::PhantomData;
 use std::sync::atomic::{AtomicU64, AtomicU8, AtomicUsize, Ordering};
 use std::sync::{Mutex, RwLock};
 
+use crate::engine::access_buffer::AccessBuffer;
 use crate::engine::bucket::Bucket;
 use crate::engine::hash::compute_hash;
 use crate::engine::slab::SlabPool;
@@ -163,6 +164,9 @@ pub struct ConcurrentPulseMap<K: PulseKey, V: PulseValue> {
     current_epoch: AtomicU64,
     /// Default TTL in insertion epochs. 0 = disabled.
     default_ttl: AtomicU64,
+    /// Lock-free ring buffer for deferred LRU/LFU access tracking.
+    /// Reads push events here instead of mutating MetaWord inline.
+    access_buffer: AccessBuffer,
     _marker: PhantomData<(K, V)>,
 }
 
@@ -184,6 +188,7 @@ impl<K: PulseKey, V: PulseValue> ConcurrentPulseMap<K, V> {
             resize_threshold: 0.75,
             current_epoch: AtomicU64::new(0),
             default_ttl: AtomicU64::new(0),
+            access_buffer: AccessBuffer::new(4096),
             _marker: PhantomData,
         }
     }
@@ -211,6 +216,7 @@ impl<K: PulseKey, V: PulseValue> ConcurrentPulseMap<K, V> {
             resize_threshold: 0.75,
             current_epoch: AtomicU64::new(0),
             default_ttl: AtomicU64::new(0),
+            access_buffer: AccessBuffer::new(4096),
             _marker: PhantomData,
         }
     }
@@ -289,6 +295,10 @@ impl<K: PulseKey, V: PulseValue> ConcurrentPulseMap<K, V> {
 
         // Advance epoch on every insert
         self.current_epoch.fetch_add(1, Ordering::Relaxed);
+
+        // Note: Access buffer events (from get()) are NOT drained here.
+        // The buffer is lossy — when full, new events are silently dropped.
+        // This keeps insert latency low while providing approximate LRU/LFU tracking.
 
         let kb = key.to_bytes();
         let vb = value.to_bytes();
@@ -413,7 +423,9 @@ impl<K: PulseKey, V: PulseValue> ConcurrentPulseMap<K, V> {
                     if self.is_expired(&state, idx, slot_idx) {
                         return None;
                     }
-                    bucket.meta.on_access(slot_idx);
+                    // Defer LRU/LFU update to access buffer instead of mutating inline.
+                    // This keeps the bucket's cache line clean during reads.
+                    self.access_buffer.push(idx, slot_idx);
                     let val_bytes = if slot.get_mode() == 0 {
                         slot.inline_value().to_vec()
                     } else {

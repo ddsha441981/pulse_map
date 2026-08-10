@@ -59,7 +59,7 @@ impl PulseMapRaw {
     /// Total capacity = `actual_buckets × 4` entries.
     pub fn new(num_buckets: usize) -> Self {
         let actual = num_buckets.max(1).next_power_of_two();
-        let buckets = vec![Bucket::empty(); actual];
+        let buckets = (0..actual).map(|_| Bucket::empty()).collect();
         let slots_ttl = vec![SlotTTL::default(); actual * 4];
         Self {
             buckets,
@@ -258,10 +258,8 @@ impl PulseMapRaw {
                 if self.is_expired(bucket_idx, slot_idx) {
                     return None;
                 }
-                unsafe {
-                    let bucket_ptr = bucket as *const Bucket as *mut Bucket;
-                    (*bucket_ptr).meta.on_access(slot_idx);
-                }
+                // MetaWord is AtomicU64 — on_access uses CAS, safe from shared ref
+                bucket.meta.on_access(slot_idx);
                 return Some(slot.get_value(&self.slab_pool));
             }
         }
