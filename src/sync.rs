@@ -23,7 +23,7 @@
 
 use std::cell::UnsafeCell;
 use std::marker::PhantomData;
-use std::sync::atomic::{AtomicU32, AtomicU8, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicU8, AtomicUsize, Ordering};
 use std::sync::{Mutex, RwLock};
 
 use crate::engine::bucket::Bucket;
@@ -160,9 +160,9 @@ pub struct ConcurrentPulseMap<K: PulseKey, V: PulseValue> {
     auto_resize: bool,
     resize_threshold: f64,
     /// Global epoch counter — incremented on every insert.
-    current_epoch: AtomicU32,
+    current_epoch: AtomicU64,
     /// Default TTL in insertion epochs. 0 = disabled.
-    default_ttl: AtomicU32,
+    default_ttl: AtomicU64,
     _marker: PhantomData<(K, V)>,
 }
 
@@ -182,8 +182,8 @@ impl<K: PulseKey, V: PulseValue> ConcurrentPulseMap<K, V> {
             eviction_count: AtomicUsize::new(0),
             auto_resize: false,
             resize_threshold: 0.75,
-            current_epoch: AtomicU32::new(0),
-            default_ttl: AtomicU32::new(0),
+            current_epoch: AtomicU64::new(0),
+            default_ttl: AtomicU64::new(0),
             _marker: PhantomData,
         }
     }
@@ -209,8 +209,8 @@ impl<K: PulseKey, V: PulseValue> ConcurrentPulseMap<K, V> {
             eviction_count: AtomicUsize::new(0),
             auto_resize: true,
             resize_threshold: 0.75,
-            current_epoch: AtomicU32::new(0),
-            default_ttl: AtomicU32::new(0),
+            current_epoch: AtomicU64::new(0),
+            default_ttl: AtomicU64::new(0),
             _marker: PhantomData,
         }
     }
@@ -220,19 +220,19 @@ impl<K: PulseKey, V: PulseValue> ConcurrentPulseMap<K, V> {
     /// Entries inserted more than `ttl_epochs` insertions ago
     /// are treated as expired — `get()`/`peek()` return `None`.
     #[inline]
-    pub fn set_ttl(&self, ttl: u32) {
+    pub fn set_ttl(&self, ttl: u64) {
         self.default_ttl.store(ttl, Ordering::Relaxed);
     }
 
     /// Returns the current TTL setting (0 = disabled).
     #[inline]
-    pub fn get_ttl(&self) -> u32 {
+    pub fn get_ttl(&self) -> u64 {
         self.default_ttl.load(Ordering::Relaxed)
     }
 
     /// Returns the current epoch counter (total insertions so far).
     #[inline]
-    pub fn current_epoch(&self) -> u32 {
+    pub fn current_epoch(&self) -> u64 {
         self.current_epoch.load(Ordering::Relaxed)
     }
 
@@ -245,7 +245,7 @@ impl<K: PulseKey, V: PulseValue> ConcurrentPulseMap<K, V> {
         } else {
             entry.ttl
         };
-        if effective_ttl == 0 || effective_ttl == u32::MAX {
+        if effective_ttl == 0 || effective_ttl == u64::MAX {
             return false;
         }
         let epoch = self.current_epoch.load(Ordering::Relaxed);
@@ -254,7 +254,7 @@ impl<K: PulseKey, V: PulseValue> ConcurrentPulseMap<K, V> {
 
     /// Stamp the current epoch and per-entry TTL onto a slot.
     #[inline]
-    fn stamp_epoch(&self, state: &MapInner, bucket_idx: usize, slot_idx: u8, ttl: u32) {
+    fn stamp_epoch(&self, state: &MapInner, bucket_idx: usize, slot_idx: u8, ttl: u64) {
         let epoch = self.current_epoch.load(Ordering::Relaxed);
         state.epochs.lock().unwrap()[bucket_idx * 4 + slot_idx as usize] = SlotTTL { epoch, ttl };
     }
@@ -267,14 +267,14 @@ impl<K: PulseKey, V: PulseValue> ConcurrentPulseMap<K, V> {
     /// Thread-safe insert with a per-entry TTL override.
     ///
     /// - `ttl = 0`: use the map's default TTL
-    /// - `ttl = u32::MAX`: this entry never expires
+    /// - `ttl = u64::MAX`: this entry never expires
     /// - `ttl = N`: this entry expires after N insertions
-    pub fn insert_ttl(&self, key: K, value: V, ttl: u32) {
+    pub fn insert_ttl(&self, key: K, value: V, ttl: u64) {
         self.insert_internal(key, value, ttl);
     }
 
     /// Internal insert with TTL parameter.
-    fn insert_internal(&self, key: K, value: V, ttl: u32) {
+    fn insert_internal(&self, key: K, value: V, ttl: u64) {
         if self.auto_resize {
             let state = self.inner.read().unwrap();
             let num_bkts = state.num_buckets;
