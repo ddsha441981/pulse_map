@@ -8,7 +8,8 @@ Layer 4: sync.rs        → ConcurrentPulseMap (thread-safe wrapper)
 Layer 3: lib.rs         → TypedPulseMap<K,V>, PulseMap (user API)
 Layer 2: raw.rs         → PulseMapRaw (hash table logic, per-entry TTL)
 Layer 1: engine/        → Building blocks
-           ├── meta.rs  → MetaWord (8-byte eviction metadata)
+           ├── meta.rs  → MetaWord (8-byte AtomicU64 eviction metadata)
+           ├── access_buffer.rs → AccessBuffer (lock-free lossy ring buffer for deferred LRU/LFU)
            ├── slot.rs  → Slot (14-byte inline/slab storage)
            ├── bucket.rs→ Bucket (64-byte cache line unit)
            ├── hash.rs  → WyHash + HashResult decomposition
@@ -23,7 +24,8 @@ Layer 1: engine/        → Building blocks
 | `raw.rs` | ~330 | Core insert/get/remove/TTL/per-entry-TTL logic |
 | `sync.rs` | ~600 | ConcurrentPulseMap + per-bucket spinlocks |
 | `sharded.rs` | ~270 | ShardedPulseMap — 16-shard concurrent map |
-| `engine/meta.rs` | ~150 | MetaWord: H2, state, LFU, LRU bit packing |
+| `engine/meta.rs` | ~150 | MetaWord: AtomicU64, H2, state, LFU, LRU bit packing |
+| `engine/access_buffer.rs` | ~100 | AccessBuffer: lock-free lossy ring buffer for deferred LRU/LFU |
 | `engine/slot.rs` | ~120 | Slot: inline/slab dual-mode storage |
 | `engine/bucket.rs` | ~50 | Bucket: MetaWord + 4 Slots = 64 bytes |
 | `engine/hash.rs` | ~40 | WyHash → H1, H2, ext_fp decomposition |
@@ -66,7 +68,7 @@ get("hello")
   │     (rejects ~99.2% of non-matches without key comparison)
   ├── 5. For each matching slot:
   │     ├── Compare full key bytes
-  │     ├── Match? → on_access(), return value
+  │     ├── Match? → Push to AccessBuffer, return value
   │     └── No match? → Continue
   ├── 6. No match found → return None
   └── 7. Unlock: spinlock[idx].release()
@@ -102,7 +104,7 @@ SlabEntry {
 }
 ```
 
-**Design trade-off:** Individual slab entries are never freed until the entire pool is dropped (arena pattern). This is optimal for cache workloads where entries are short-lived and the pool is periodically reset via resize.
+**Design trade-off:** Individual slab entries are managed via a free-list reuse allocator. This is optimal for cache workloads where memory can be efficiently reused before the pool is periodically reset via resize.
 
 ## Resize Strategy
 

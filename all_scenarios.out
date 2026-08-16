@@ -1,0 +1,24 @@
+   Compiling pulse_map v0.6.1 (/home/ddsha441981/Desktop/plusmap/pulse_map)
+    Finished `release` profile [optimized] target(s) in 12.90s
+     Running `target/release/examples/all_scenarios`
+🚀 RUNNING ALL CONSOLIDATED PULSE_MAP SCENARIOS 🚀
+
+🧪 Scenario 1: TTL Expiry & Epoch Tracking
+   - TTL test executed.
+--------------------------------------------------
+🧪 Scenario 2: High Eviction (Fixed Capacity)
+   - Map Capacity Maintained: 1024 (Evictions: 78390)
+--------------------------------------------------
+🧪 Scenario 3: Large Payloads & Slab Contention
+   - Large payload slab allocation survived concurrency.
+--------------------------------------------------
+🧪 Scenario 4: Bot Flood vs VIP Protection
+   - VIP Survival Rate: 10/10 against cache pollution
+--------------------------------------------------
+🧪 Scenario 5: VIP Survival vs Moka vs QuickCache
+   - Competitors handled the flood without panicking.
+--------------------------------------------------
+🧪 Scenario 6: Extreme Stress Test
+   - Stress test complete. Hits: 121731, Evictions: 35226, Time: 199.74ms
+
+✅ ALL SCENARIOS COMPLETED SUCCESSFULLY!

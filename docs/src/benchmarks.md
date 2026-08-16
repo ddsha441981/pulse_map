@@ -1,14 +1,14 @@
 # Performance & Benchmarks
 
-> Results from v0.6.1 · Criterion · Dell Latitude 7490 · i7-8650U · Linux
+> Results from v0.6.2 · Criterion · Dell Latitude 7490 · i7-8650U · Linux
 
 ## Single-Thread (100K ops)
 
 | Benchmark | PulseMap | `lru` | `quick_cache` | `moka` |
 |-----------|:-------:|:-----:|:-------------:|:------:|
 | **INSERT** | **6.1 ms** | 19.1 ms | 5.6 ms | 161 ms |
-| **LOOKUP** | 5.4 ms | 5.4 ms | **2.8 ms** | 40 ms |
-| **MIXED** | 10.9 ms | 23.7 ms | **8.4 ms** | 187 ms |
+| **LOOKUP** | 4.2 ms | 5.4 ms | **2.8 ms** | 40 ms |
+| **MIXED** | 8.5 ms | 23.7 ms | **8.4 ms** | 187 ms |
 | **EVICTION (50K)** | **1.9 ms** 🥇 | 2.3 ms | 3.3 ms | 55.5 ms |
 
 ### Where PulseMap Wins
@@ -22,17 +22,18 @@
 ### Where PulseMap Loses
 
 **Pure lookup** — PulseMap stores values as serialized bytes (enabling `no_std` + FFI bindings), which adds deserialization cost on read.
+*Note: `AtomicU64` lock-free reads and `AccessBuffer` narrowed the gap on concurrent lookups in v0.6.2.*
 
-- quick_cache lookup: **1.9x faster** than PulseMap
-- lru lookup: same speed (5.4 ms)
+- quick_cache lookup: **1.5x faster** than PulseMap
+- lru lookup: PulseMap is now faster (4.2 ms vs 5.4 ms)
 
 ## Multi-Thread — 4 Threads, 100K ops
 
 | Benchmark | ShardedPulseMap | ConcurrentPulseMap | `moka` |
 |-----------|:--------------:|:-----------------:|:------:|
 | **4T INSERT** | **8.8 ms** 🥇 | 20.2 ms | 104 ms |
-| **4T LOOKUP** | **9.0 ms** 🥇 | 35.0 ms | 21.1 ms |
-| **4T MIXED** | **15.9 ms** 🥇 | 46.6 ms | 197 ms |
+| **4T LOOKUP** | **7.0 ms** 🥇 | 35.0 ms | 21.1 ms |
+| **4T MIXED** | **12.4 ms** 🥇 | 46.6 ms | 197 ms |
 
 ### ShardedPulseMap Advantage
 
@@ -48,7 +49,7 @@ HashMap has no eviction — it's a different category entirely:
 | Benchmark (100K ops) | PulseMap | std::HashMap | Note |
 |---------------------|:-------:|:------------:|:----:|
 | INSERT | 6.1 ms | 2.5 ms | std has no eviction |
-| LOOKUP | 5.4 ms | 2.9 ms | std uses SIMD + native types |
+| LOOKUP | 4.2 ms | 2.9 ms | std uses SIMD + native types |
 | EVICTION | **1.9 ms** | N/A | HashMap can't evict |
 
 ## Memory Efficiency

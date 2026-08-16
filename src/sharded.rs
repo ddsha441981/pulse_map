@@ -65,13 +65,12 @@ impl<K: PulseKey, V: PulseValue> ShardedPulseMap<K, V> {
 
     /// Pick the shard for a key.
     ///
-    /// Uses the TOP 4 bits of the hash: bucket selection inside a shard uses
-    /// the LOW bits (`h1 & bucket_mask`), so sharding on `h1 % 16` would make
-    /// every key in a shard share its low bits and hit only 1/16th of the
-    /// shard's buckets.
+    /// Uses bits 14-17 of the hash to avoid overlapping with:
+    ///   - `h2` fingerprint (bits 57-63) — preserves full 7-bit entropy
+    ///   - bucket_mask (low bits 0-N) — avoids clustering within shards
     #[inline]
     fn shard_for(key_bytes: &[u8]) -> usize {
-        (compute_hash(key_bytes).h1 >> 60) as usize & (NUM_SHARDS - 1)
+        (compute_hash(key_bytes).h1 >> 14) as usize & (NUM_SHARDS - 1)
     }
 
     /// Thread-safe insert.
@@ -83,9 +82,9 @@ impl<K: PulseKey, V: PulseValue> ShardedPulseMap<K, V> {
     /// Thread-safe insert with a per-entry TTL override.
     ///
     /// - `ttl = 0`: use the map's default TTL
-    /// - `ttl = u32::MAX`: this entry never expires
+    /// - `ttl = u64::MAX`: this entry never expires
     /// - `ttl = N`: this entry expires after N insertions
-    pub fn insert_ttl(&self, key: K, value: V, ttl: u32) {
+    pub fn insert_ttl(&self, key: K, value: V, ttl: u64) {
         let idx = key.with_key_bytes(Self::shard_for);
         self.shards[idx].insert_ttl(key, value, ttl);
     }
@@ -128,7 +127,7 @@ impl<K: PulseKey, V: PulseValue> ShardedPulseMap<K, V> {
     ///
     /// Each shard counts its own epochs, so an entry expires after `ttl`
     /// inserts landing in ITS shard (~`ttl × 16` inserts map-wide).
-    pub fn set_ttl(&self, ttl: u32) {
+    pub fn set_ttl(&self, ttl: u64) {
         for shard in self.shards.iter() {
             shard.set_ttl(ttl);
         }
@@ -136,12 +135,12 @@ impl<K: PulseKey, V: PulseValue> ShardedPulseMap<K, V> {
 
     /// Current TTL setting (same across all shards).
     #[inline]
-    pub fn get_ttl(&self) -> u32 {
+    pub fn get_ttl(&self) -> u64 {
         self.shards[0].get_ttl()
     }
 
     /// Highest epoch across shards (the most active shard's insert count).
-    pub fn current_epoch(&self) -> u32 {
+    pub fn current_epoch(&self) -> u64 {
         self.shards
             .iter()
             .map(|s| s.current_epoch())

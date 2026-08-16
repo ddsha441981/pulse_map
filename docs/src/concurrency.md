@@ -18,8 +18,9 @@ Level 2: Per-Bucket Spinlock (AtomicU8)
 
 ### Why This Works
 
-- **Different buckets = zero contention.** Two threads accessing different buckets run fully in parallel.
-- **Same bucket = brief spinlock.** Bucket operations are ~10ns, so spin wait is negligible.
+- **Lock-free reads:** MetaWord uses `AtomicU64` for lock-free reads, and `get()` pushes to a deferred `AccessBuffer` without acquiring exclusive bucket spinlocks for metadata updates.
+- **Different buckets = zero contention.** Two threads accessing different buckets for writes run fully in parallel.
+- **Same bucket = brief spinlock.** Bucket write operations are ~10ns, so spin wait is negligible.
 - **RwLock read = cheap.** Multiple threads hold read locks simultaneously.
 - **Resize = rare.** Only triggered at 75% load with auto-resize enabled.
 
@@ -97,6 +98,8 @@ Resize uses a **stop-the-world** approach:
 
 ## Thread Safety Guarantees
 
+**Note on UB Fix:** `PulseMapRaw` is `Send` but NOT `Sync`. The concurrent wrappers handle all the necessary synchronization to safely share the map.
+
 | Operation | Concurrent with | Safe? |
 |-----------|----------------|:-----:|
 | `get()` | `get()` | ✅ (parallel if different buckets) |
@@ -131,7 +134,7 @@ ShardedPulseMap:
   ├── ...
   └── Shard 15: ConcurrentPulseMap (own RwLock + spinlocks)
 
-Shard selection: h1 >> 60 (top 4 bits of hash)
+Shard selection: h1 & 0xF (low-bits routing)
 ```
 
 **Result:** Threads accessing different shards have **zero lock contention**.

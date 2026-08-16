@@ -23,6 +23,8 @@ The slot with the **minimum score** is evicted.
 
 ## MetaWord Layout (8 bytes)
 
+The MetaWord is implemented as an `AtomicU64`, supporting lock-free atomic loads and CAS operations.
+
 ```
 Bit Layout (64 bits):
 ┌──────────────────────────────────────────────────────────────┐
@@ -32,7 +34,7 @@ Bit Layout (64 bits):
 │ 2b│7b   │4b  │3b │ 2b│7b   │4b  │3b │ 2b│7b   │4b  │3b │2b│7b. │
 └──────────────────────────────────────────────────────────────┘
 
-st  = Slot State (2 bits): Empty(0), Full(1), Deleted(2), Tombstone(3)
+st  = Slot State (2 bits): Empty(0), Full(1), Tombstone(2)
 h2   = H2 Fingerprint (7 bits): Fast hash match filter
 freq = Frequency Counter (4 bits): Access count (0-15)
 rec  = LRU Recency (3 bits): Relative age (0=oldest, 7=newest)
@@ -58,6 +60,10 @@ New entries start with `freq=0, recency=7` (newest). They must earn frequency to
 ### Frequency Saturation
 
 LFU counter saturates at 15 (4 bits). This prevents long-lived entries from becoming permanently sticky — a recently-inserted entry with moderate access can still compete.
+
+## AccessBuffer Deferred Tracking
+
+PulseMap uses a lock-free lossy ring buffer (`AccessBuffer`) to track accesses during `get()` operations. This allows read-heavy workloads to record access frequency (LFU) and recency (LRU) without acquiring bucket spinlocks, significantly reducing lock contention. The deferred accesses are later applied to the `AtomicU64` MetaWord via CAS.
 
 ## Eviction Statistics
 
@@ -93,4 +99,4 @@ If you need different eviction behavior:
 - **More capacity instead of better eviction** → Use auto-resize: `with_auto_resize(n)`
 - **No eviction at all** → Use auto-resize with large initial size
 - **TTL-based expiration** → Use `set_ttl(n)` (global) or `insert_ttl(k, v, n)` (per-entry)
-- **Permanent entries** → Use `insert_ttl(key, val, u32::MAX)` — never expire
+- **Permanent entries** → Use `insert_ttl(key, val, u64::MAX)` — never expire

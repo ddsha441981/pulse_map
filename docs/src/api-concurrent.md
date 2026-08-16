@@ -47,8 +47,8 @@ println!("Entries: {}", map.len());
 map.insert("key".to_string(), "value".to_string());
 
 // Insert with per-entry TTL (v0.6.1+)
-map.insert_ttl("key".to_string(), "value".to_string(), 100);  // expires after 100 inserts
-map.insert_ttl("key".to_string(), "value".to_string(), u32::MAX);  // never expires
+map.insert_ttl("key".to_string(), "value".to_string(), 100u64);  // expires after 100 inserts
+map.insert_ttl("key".to_string(), "value".to_string(), u64::MAX);  // never expires
 
 // Get (updates eviction priority atomically)
 let val: Option<String> = map.get(&"key".to_string());
@@ -88,7 +88,7 @@ map.num_buckets()     // Acquires read lock
 
 ```
 Read operations (get, peek, contains, stats):
-  └── RwLock::read() + per-bucket spinlock
+  └── RwLock::read() + AtomicU64 MetaWord read (deferred LRU/LFU via AccessBuffer)
 
 Write operations (insert, remove):
   └── RwLock::read() + per-bucket spinlock
@@ -97,7 +97,7 @@ Resize:
   └── RwLock::write() (exclusive — blocks everything)
 ```
 
-**Key insight:** Normal reads and writes only acquire a **read lock** on the RwLock, so they run concurrently. The per-bucket spinlock serializes access to the same bucket only.
+**Key insight:** Normal reads and writes only acquire a **read lock** on the RwLock, so they run concurrently. The per-bucket spinlock serializes access to the same bucket only. Reads use an `AtomicU64` MetaWord and `AccessBuffer` for deferred LRU/LFU updates, completely avoiding locks on read paths.
 
 ## Production Pattern
 
