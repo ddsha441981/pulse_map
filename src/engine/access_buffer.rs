@@ -13,7 +13,7 @@
 //! access event only slightly delays priority promotion, and under high load
 //! (when the buffer fills), eviction accuracy matters less than read latency.
 
-use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 
 /// A single access event: which bucket and slot were accessed.
 #[repr(C)]

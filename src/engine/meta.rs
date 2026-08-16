@@ -10,7 +10,7 @@
 //! [27..0]  Priorities: 4 × 7-bit (freq[4] + recency[3])
 //! ```
 
-use std::sync::atomic::{AtomicU64, Ordering};
+use core::sync::atomic::{AtomicU64, Ordering};
 
 use crate::SlotState;
 
