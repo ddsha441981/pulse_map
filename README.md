@@ -7,6 +7,7 @@ A fixed-capacity hash table with built-in LFU+LRU eviction, written in Rust.
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE-APACHE)
 [![Tests](https://img.shields.io/badge/tests-58%20passing-brightgreen)]()
+[![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-blue.svg)](https://ddsha441981.github.io/pulse_map/)
 
 ---
 
