@@ -76,13 +76,11 @@ See the full [CHANGELOG.md](https://github.com/ddsha441981/pulse_map/blob/main/C
 
 
 ### Added
-- **Multi-language FFI bindings** — C, Python (PyO3), Java (Panama FFM), Node.js (napi-rs)
+- **FFI bindings** — C ABI
 - `ConcurrentPulseMap` — thread-safe wrapper with per-bucket spinlocks
 - Auto-resize support (`with_auto_resize()`)
 - `peek()` method — lookup without eviction priority update
-- Unicode support across all bindings
-- `Cleaner`-based GC safety net for Java bindings
-- Null-safety checks across all bindings (63 total tests)
+- Null-safety checks across C bindings
 
 ### Changed
 - Workspace split: `pulse_map` (core) + `pulse_map_bindings` (FFI)

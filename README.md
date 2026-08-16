@@ -2,8 +2,10 @@
 
 A fixed-capacity hash table with built-in LFU+LRU eviction, written in Rust.
 
-[![Crate](https://img.shields.io/crates/v/pulse_map.svg)](https://crates.io/crates/pulse_map)
+[![Crates.io Version](https://img.shields.io/crates/v/pulse_map.svg)](https://crates.io/crates/pulse_map)
+[![Crates.io Downloads](https://img.shields.io/crates/d/pulse_map.svg)](https://crates.io/crates/pulse_map)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE-APACHE)
 [![Tests](https://img.shields.io/badge/tests-58%20passing-brightgreen)]()
 
 ---
@@ -503,7 +505,8 @@ pulse_map = { version = "0.6", default-features = false }
 
 ---
 
-## C FFI Bindings (v0.5.0+)
+## C FFI Bindings (Work in Progress)
+> Not yet released. API below is the planned interface.
 
 ```c
 #include "pulse_map.h"
@@ -511,8 +514,6 @@ PulseMapHandle *map = pulse_map_new(1024);
 pulse_map_insert(map, "hello", 5, "world", 5);
 pulse_map_free(map);
 ```
-
-> Python, Java, and Node.js bindings are available in separate workspace crates.
 
 ---
 
@@ -534,16 +535,6 @@ pulse_map_free(map);
 - On low-contention, general-purpose read/write mixed workloads, QuickCache is modestly faster (see [Where PulseMap Fits](#where-pulsemap-fits)) — PulseMap's edge is specifically under contention and in memory footprint, not universal
 - TTL is insertion-count based, not wall-clock time
 - No async API yet
-
----
-
-## Author
-
-**Deendayal Kumawat**
-
-[![LinkedIn](https://img.shields.io/badge/LinkedIn-0077B5?style=flat-square&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/deendayal-kumawat/)
-[![GitHub](https://img.shields.io/badge/GitHub-181717?style=flat-square&logo=github&logoColor=white)](https://github.com/ddsha441981)
-[![Email](https://img.shields.io/badge/Email-0078D4?style=flat-square&logo=microsoft-outlook&logoColor=white)](mailto:deendayal_kumawat@outlook.com)
 
 ---
 
