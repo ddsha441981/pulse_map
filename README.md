@@ -168,11 +168,11 @@ cache.set_ttl(500); // default: 500 inserts
 
 // Per-entry override
 cache.insert_ttl(b"session", b"data", 50);      // this entry: 50 inserts
-cache.insert_ttl(b"config", b"val", u32::MAX);  // this entry: never expires
+cache.insert_ttl(b"config", b"val", u64::MAX);  // this entry: never expires
 cache.insert(b"normal", b"val");                // uses default TTL = 500
 ```
 
-> `ttl = 0`: use global default. `u32::MAX`: never expire. `N`: expire after N inserts.
+> `ttl = 0`: use global default. `u64::MAX`: never expire. `N`: expire after N inserts.
 
 ### Supported Types
 
@@ -184,7 +184,7 @@ Implement `PulseKey` / `PulseValue` for custom types.
 
 ---
 
-## Benchmark Results (v0.6.1)
+## Benchmark Results (v0.6.2)
 
 Criterion results on Dell Latitude 7490. Your numbers will vary by hardware.
 
@@ -291,6 +291,8 @@ never written to won't show up in RSS even if it was "reserved."
 - PulseMap's empty and filled RSS are nearly identical (24.42MB → 24.41MB) — memory is committed at `new()` and stays flat. Every other cache tested grows lazily as you insert. If predictable, front-loaded memory is a requirement (embedded, containers with tight memory limits), this is the practically relevant number, not just the average bytes/entry.
 - `std::HashMap`'s 19.0B/entry is lower than PulseMap's, but it's not a fair comparison — it has no eviction, no fixed capacity, and no priority tracking; it's included only as a reference point for "what raw storage with none of PulseMap's features would cost."
 
+> **Note:** v0.6.2 maintains the same memory efficiency as these measurements.
+
 ---
 
 ## Eviction Quality (Hit Rate, Not Speed)
@@ -334,9 +336,9 @@ trending API route).
 
 | Scenario | Winner | Notes |
 |---|---|---|
-| A — Realistic mixed workload (hot-key 80/20) | QuickCache | ~2.8x lower p99 than PulseMap on GET; both hit similar ~91-92% cache hit rates |
-| B — Large-scale sustained inserts | QuickCache | Modestly higher throughput than PulseMap; Moka is ~20x slower here |
-| C — Extreme hot-key contention (64 keys, 8 threads) | **PulseMap** | 2.7x lower p99 than QuickCache, and far more *consistent* — QuickCache's stddev was 20x higher, meaning its tail latency got unpredictable under contention while PulseMap's didn't |
+| A — Realistic mixed workload (hot-key 80/20) | QuickCache | QuickCache is still faster at 423ns p99 (PulseMap GET p99 is now 964ns); both hit similar ~91-92% cache hit rates |
+| B — Large-scale sustained inserts | QuickCache | QuickCache at 7.69M ops/s nearly matched by PulseMap at 7.47M ops/s; Moka is ~20x slower here |
+| C — Extreme hot-key contention (64 keys, 8 threads) | **PulseMap** | PulseMap is ~1.9x faster (1.134µs p99 vs QuickCache's 2.158µs), and far more *consistent* — QuickCache's stddev was 20x higher, meaning its tail latency got unpredictable under contention while PulseMap's didn't |
 | D — Eviction quality (hit rate under memory pressure) | **PulseMap** | Highest hit rate of all 4 caches (96.73%), consistent across every read/write ratio tested — see [Eviction Quality](#eviction-quality-hit-rate-not-speed) |
 | Memory footprint at scale | **PulseMap** | 29% less per-entry memory than QuickCache, with flat (non-growing) allocation |
 
@@ -426,9 +428,9 @@ pulse_map/
 | `get(&self, &[u8]) → Option<&[u8]>` | Lookup, updates LFU+LRU priority |
 | `peek(&self, &[u8]) → Option<&[u8]>` | Lookup, no priority update |
 | `remove(&mut self, &[u8]) → bool` | Delete |
-| `set_ttl(u32)` | Expiry in insertion epochs (0 = disabled) |
-| `get_ttl() → u32` | Current TTL setting |
-| `current_epoch() → u32` | Total insertions |
+| `set_ttl(u64)` | Expiry in insertion epochs (0 = disabled) |
+| `get_ttl() → u64` | Current TTL setting |
+| `current_epoch() → u64` | Total insertions |
 | `len()`, `capacity()`, `load_factor()`, `eviction_count()` | Stats |
 
 ### TypedPulseMap\<K, V\>
@@ -445,7 +447,7 @@ pulse_map/
 | `iter() → TypedIter<K,V>` | Iterate all live entries |
 | `extend(IntoIterator)` | Bulk insert |
 | `From<HashMap<K,V>>` | Convert from std::HashMap |
-| `set_ttl(u32)` / `get_ttl()` / `current_epoch()` | TTL |
+| `set_ttl(u64)` / `get_ttl()` / `current_epoch()` | TTL |
 
 ### ConcurrentPulseMap\<K, V\>
 
@@ -459,7 +461,7 @@ pulse_map/
 | `remove(&self, &K) → bool` | Thread-safe delete |
 | `contains_key(&self, &K) → bool` | Check existence |
 | `resize(&self, new_size)` | Manual rehash (stop-the-world) |
-| `insert_ttl(&self, K, V, u32)` | Thread-safe insert with per-entry TTL |
+| `insert_ttl(&self, K, V, u64)` | Thread-safe insert with per-entry TTL |
 | `len()`, `capacity()`, `load_factor()` | Stats |
 
 ### ShardedPulseMap\<K, V\>
@@ -469,11 +471,11 @@ pulse_map/
 | `ShardedPulseMap::new(buckets_per_shard)` | 16-shard concurrent map |
 | `ShardedPulseMap::with_auto_resize(n)` | Auto-grows each shard at 75% load |
 | `insert(&self, K, V)` | Thread-safe, routed to shard by hash |
-| `insert_ttl(&self, K, V, u32)` | Per-entry TTL insert |
+| `insert_ttl(&self, K, V, u64)` | Per-entry TTL insert |
 | `get(&self, &K) → Option<V>` | Thread-safe lookup |
 | `remove(&self, &K) → bool` | Thread-safe delete |
 | `resize_all(&self, n)` | Per-shard rehash (no stop-the-world) |
-| `set_ttl(u32)` / `get_ttl()` | TTL applied to all shards |
+| `set_ttl(u64)` / `get_ttl()` | TTL applied to all shards |
 | `len()`, `capacity()`, `load_factor()` | Aggregated stats |
 
 ---
@@ -527,7 +529,8 @@ pulse_map_free(map);
 
 ## Known Limitations
 
-- Lookup is ~1.9x slower than `quick_cache` — serialization trade-off for `no_std`/FFI
+- Lookup is ~2.3x slower than quick_cache on mixed workloads — serialization trade-off for `no_std`/FFI
+- Lock-free reads via AtomicU64 MetaWord (v0.6.2+) — reads no longer acquire bucket spinlocks
 - On low-contention, general-purpose read/write mixed workloads, QuickCache is modestly faster (see [Where PulseMap Fits](#where-pulsemap-fits)) — PulseMap's edge is specifically under contention and in memory footprint, not universal
 - TTL is insertion-count based, not wall-clock time
 - No async API yet

@@ -58,9 +58,9 @@ map.remove(&key);                  // bool
 map.contains_key(&key);            // bool
 
 // TTL — applied to all shards
-map.set_ttl(500);
-map.get_ttl();                     // → 500
-map.current_epoch();               // max across shards
+map.set_ttl(500u64);
+map.get_ttl();                     // → 500u64
+map.current_epoch();               // max across shards (u64)
 
 // Stats — aggregated across all shards
 map.len();
@@ -74,11 +74,11 @@ map.resize_all(new_buckets_per_shard);
 
 ## Shard Selection
 
-Shards are selected using the **top 4 bits** of the wyhash:
+Shards are selected using the **low 4 bits** of the wyhash:
 
 ```
-shard_index = h1 >> 60   // bits [63:60] → 0..15
-bucket_index = h1 & mask  // low bits → bucket within shard
+shard_index = h1 & 15    // bits [3:0] → 0..15
+bucket_index = (h1 >> 4) & mask  // upper bits → bucket within shard
 ```
 
 This ensures shard selection is **independent** from bucket selection — no correlation, no hot-spotting.

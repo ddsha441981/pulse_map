@@ -16,7 +16,7 @@ PulseMap solves this by packing **everything into one 64-byte cache line**:
 ```
 PulseMap Bucket (64 bytes):
   ┌─────────────────────────────────────────────────┐
-  │ MetaWord (8 bytes)                              │
+  │ MetaWord (8 bytes, AtomicU64 for lock-free reads)│
   │  ├── 4× Slot state (2 bits each)                │
   │  ├── 4× H2 fingerprint (7 bits each)            │
   │  └── 4× Priority (7 bits each: freq[4]+rec[3])  │
@@ -61,7 +61,7 @@ data[0]:     header byte
                bits 6-0: ext_fp_hi (7-bit extended fingerprint)
 data[1..5]:  ext_fp (32-bit extended fingerprint, LE)
 data[5]:     flags (reserved)
-data[6..14]: slab_ptr (u64 pointer to SlabEntry, LE)
+data[6..14]: slab_idx (u64 index into SlabPool, LE)
 ```
 
 The actual key+value data is stored in the **SlabPool** arena allocator.
@@ -113,7 +113,10 @@ ConcurrentPulseMap
   │     ├── Vec<UnsafeCell<Bucket>>   ← 64 bytes each, cache-aligned
   │     ├── BucketLocks               ← 1 AtomicU8 per bucket
   │     ├── Mutex<SlabPool>           ← arena for large KV pairs
-  │     ├── Mutex<Vec<SlotTTL>>       ← per-entry TTL metadata (v0.6.1+)
+  │     ├── Mutex<Vec<SlotTTL>>       ← per-entry TTL metadata (v0.6.1+) (epoch: u64, ttl: u64)
+  │     ├── access_buffer: AccessBuffer
+  │     ├── current_epoch: AtomicU64
+  │     ├── default_ttl: AtomicU64
   │     ├── num_buckets: usize
   │     └── bucket_mask: usize       ← num_buckets - 1 (power of 2)
   ├── count: AtomicUsize             ← number of entries
@@ -127,5 +130,5 @@ ShardedPulseMap (v0.6.1+)
         ├── Shard 1:  independent RwLock + buckets + slab
         ├── ...
         └── Shard 15: independent RwLock + buckets + slab
-      Shard = h1 >> 60 (top 4 bits of hash)
+      Shard = h1 & 0xF (low-bits routing)
 ```

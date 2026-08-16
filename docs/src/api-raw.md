@@ -64,7 +64,7 @@ map.set_ttl(0);
 ```rust
 // Per-entry override
 map.insert_ttl(b"session", b"data", 50);      // expires after 50 inserts
-map.insert_ttl(b"config", b"val", u32::MAX);  // never expires
+map.insert_ttl(b"config", b"val", u64::MAX);  // never expires
 map.insert(b"normal", b"val");                 // uses global TTL
 ```
 
@@ -76,3 +76,5 @@ See the [TTL page](./ttl.md) for full details.
 - Maximum performance (no serialization overhead)
 - Building custom protocols over raw bytes
 - Interfacing with C FFI bindings
+
+> **Thread Safety:** `PulseMapRaw` is `Send` but **NOT** `Sync` (fixed in v0.6.2). It cannot be shared across threads via `&PulseMapRaw`.

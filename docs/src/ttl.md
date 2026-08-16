@@ -1,6 +1,6 @@
 # TTL — Automatic Expiry
 
-> Global TTL added in **v0.6.0** · Per-entry TTL added in **v0.6.1**
+> Global TTL added in **v0.6.0** · Per-entry TTL added in **v0.6.1** · Migrated to u64 in **v0.6.2**
 
 PulseMap supports **insertion-epoch TTL** — entries automatically expire after a fixed number of insertions. No background thread, no timer, zero overhead when disabled.
 
@@ -8,7 +8,7 @@ PulseMap supports **insertion-epoch TTL** — entries automatically expire after
 
 ## How It Works
 
-Every insert bumps a monotonic `current_epoch: u32` counter. Each slot stores the epoch at which its entry was inserted. On every `get()` or `peek()`:
+Every insert bumps a monotonic `current_epoch: u64` counter. Each slot stores the epoch at which its entry was inserted. On every `get()` or `peek()`:
 
 ```
 age = current_epoch - slot_epoch
@@ -32,7 +32,7 @@ cache.set_ttl(500);
 cache.insert(b"session:abc", b"user_data");  // epoch 1
 
 // High-traffic server: 500 more inserts
-for i in 0u32..501 {
+for i in 0u64..501 {
     cache.insert(&i.to_le_bytes(), b"traffic");
 }
 
@@ -55,7 +55,7 @@ cache.set_ttl(500); // global default
 
 // Per-entry overrides
 cache.insert_ttl(b"session", b"data", 50);      // expires after 50 inserts
-cache.insert_ttl(b"config", b"val", u32::MAX);  // never expires
+cache.insert_ttl(b"config", b"val", u64::MAX);  // never expires
 cache.insert(b"normal", b"val");                 // uses global TTL = 500
 ```
 
@@ -64,8 +64,8 @@ cache.insert(b"normal", b"val");                 // uses global TTL = 500
 | `ttl` value | Behavior |
 |:-----------:|----------|
 | `0` | Use global default (`set_ttl()`) |
-| `1..u32::MAX-1` | Expire after N insertions |
-| `u32::MAX` | **Never expire** — entry lives forever |
+| `1..u64::MAX-1` | Expire after N insertions |
+| `u64::MAX` | **Never expire** — entry lives forever |
 
 ### Available On All Map Types
 
@@ -103,9 +103,9 @@ map.insert_ttl(b"short", b"val", 2);
 ### PulseMap (raw `&[u8]`)
 
 ```rust
-map.set_ttl(n: u32)              // global TTL (0 = disabled)
-map.get_ttl() -> u32             // current global TTL
-map.current_epoch() -> u32       // total insertions
+map.set_ttl(n: u64)              // global TTL (0 = disabled)
+map.get_ttl() -> u64             // current global TTL
+map.current_epoch() -> u64       // total insertions
 map.insert(key, value)           // uses global TTL
 map.insert_ttl(key, value, ttl)  // per-entry TTL override
 ```
@@ -113,7 +113,7 @@ map.insert_ttl(key, value, ttl)  // per-entry TTL override
 ### TypedPulseMap\<K, V\>
 
 ```rust
-map.set_ttl(500u32);
+map.set_ttl(500u64);
 map.insert_ttl(key, value, 50);  // per-entry TTL
 map.get_ttl()                    // → 500
 map.current_epoch()              // → total inserts
@@ -200,13 +200,13 @@ This makes TTL workload-proportional — a busier server expires entries faster.
 // PulseMapRaw fields (raw.rs) — v0.6.1
 #[derive(Clone, Copy, Default)]
 pub(crate) struct SlotTTL {
-    epoch: u32,  // insertion epoch
-    ttl: u32,    // 0 = use default, u32::MAX = never
+    epoch: u64,  // insertion epoch
+    ttl: u64,    // 0 = use default, u64::MAX = never
 }
 
 slots_ttl: Vec<SlotTTL>,  // one per slot
-current_epoch: u32,        // global counter
-default_ttl: u32,          // set via set_ttl()
+current_epoch: u64,        // global counter
+default_ttl: u64,          // set via set_ttl()
 
 // On every insert:
 self.current_epoch = self.current_epoch.wrapping_add(1);
@@ -216,10 +216,10 @@ self.slots_ttl[idx] = SlotTTL { epoch: self.current_epoch, ttl };
 fn is_expired(&self, bucket_idx: usize, slot_idx: u8) -> bool {
     let entry = self.slots_ttl[bucket_idx * 4 + slot_idx as usize];
     let effective_ttl = if entry.ttl == 0 { self.default_ttl } else { entry.ttl };
-    if effective_ttl == 0 || effective_ttl == u32::MAX { return false; }
+    if effective_ttl == 0 || effective_ttl == u64::MAX { return false; }
     self.current_epoch.wrapping_sub(entry.epoch) > effective_ttl
 }
 ```
 
-Memory overhead: `num_buckets × 4 × 8 bytes` (one `SlotTTL` per slot).
-For 1024 buckets: `1024 × 4 × 8 = 32 KB` — negligible.
+Memory overhead: `num_buckets × 4 × 16 bytes` (one `SlotTTL` per slot).
+For 1024 buckets: `1024 × 4 × 16 = 64 KB` — negligible.
