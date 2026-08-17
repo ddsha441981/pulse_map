@@ -6,6 +6,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [v0.6.3] — 2026-08-17
+
+### 📚 Documentation & Crates.io Links Fix
+
+- **Updated Crates.io Documentation URL:** Pointed `documentation` field in `Cargo.toml` directly to the hosted mdBook documentation site (`https://ddsha441981.github.io/pulse_map/`).
+- **Added Docs.rs Metadata:** Added `[package.metadata.docs.rs]` configuration in `Cargo.toml` with `all-features = true` and `rustdoc-args = ["--cfg", "docsrs"]` so docs.rs builds with complete feature flags.
+
+---
+
 ## [v0.6.2] — 2026-08-11
 
 ### 🚀 Lock-Free Reads + Data Race Fixes + Latency Reductions

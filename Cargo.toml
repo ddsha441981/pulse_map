@@ -1,6 +1,6 @@
 [package]
 name = "pulse_map"
-version = "0.6.2"
+version = "0.6.3"
 edition = "2021"
 rust-version = "1.70.0"
 authors = ["Deendayal Kumawat <deendayal_kumawat@outlook.com>"]
@@ -8,7 +8,11 @@ description = "A CPU cache-line hash table with zero-cost eviction. Every bucket
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/ddsha441981/pulse_map"
 homepage = "https://github.com/ddsha441981/pulse_map"
-documentation = "https://docs.rs/pulse_map"
+documentation = "https://ddsha441981.github.io/pulse_map/"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
 keywords = ["hashmap", "cache", "eviction", "performance", "lock-free"]
 categories = ["data-structures", "caching", "no-std"]
 readme = "README.md"
