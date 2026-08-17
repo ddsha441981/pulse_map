@@ -29,3 +29,6 @@ edit-url-template = "https://github.com/ddsha441981/pulse_map/edit/main/docs/{pa
 # Serve:    cd docs && mdbook serve  (live reload at localhost:3000)
 # Clean:    cd docs && mdbook clean
 # ──────────────────────────────────────────────────────────
+
+[output.html.playground]
+runnable = false
