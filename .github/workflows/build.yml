@@ -82,6 +82,20 @@ jobs:
         run: cargo test -p pulse_map --features simd
 
   # ═══════════════════════════════════════════════════════════
+  # Embedded no_std Check
+  # ═══════════════════════════════════════════════════════════
+  no_std:
+    name: no_std Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install embedded target
+        run: rustup target add thumbv7m-none-eabi
+      - name: Check no_std compilation
+        run: cargo check -p pulse_map --target thumbv7m-none-eabi --no-default-features
+
+  # ═══════════════════════════════════════════════════════════
   # MSRV (Minimum Supported Rust Version)
   # ═══════════════════════════════════════════════════════════
   msrv:
