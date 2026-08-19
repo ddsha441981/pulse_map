@@ -1,0 +1,21 @@
+[package]
+name = "pulse_map-fuzz"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+
+[dependencies.pulse_map]
+path = ".."
+features = ["std"]
+
+[[bin]]
+name = "fuzz_sequences"
+path = "fuzz_targets/fuzz_sequences.rs"
+test = false
+doc = false
