@@ -23,7 +23,8 @@
 
 use std::cell::UnsafeCell;
 use std::marker::PhantomData;
-use std::sync::atomic::{AtomicU64, AtomicU8, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU8, AtomicUsize};
+use portable_atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, RwLock};
 
 use crate::engine::access_buffer::AccessBuffer;
