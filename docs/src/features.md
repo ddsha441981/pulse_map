@@ -38,6 +38,8 @@ When `std` is disabled, only the core data structures are available:
 
 **Use case:** Embedded systems, OS kernels, WebAssembly.
 
+Works on targets without native 64-bit atomics (WASM32, ARMv7-M, 32-bit) via `portable-atomic` fallback.
+
 ### `simd`
 
 Enables SIMD-accelerated H2 fingerprint matching on x86_64:

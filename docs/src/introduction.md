@@ -69,6 +69,9 @@ println!("Entries: {}, Evictions: {}", map.len(), map.eviction_count());
 | Linux x86_64 | ✅ |
 | macOS x86_64 / ARM64 | ✅ |
 | Windows x86_64 | ✅ |
+| WASM32 (WebAssembly) | ✅ |
+| ARMv7-M / thumbv7m (embedded) | ✅ |
+| Any 32-bit target | ✅ |
 | MSRV: Rust 1.70.0 | ✅ |
 
 ## License

@@ -2,6 +2,16 @@
 
 See the full [CHANGELOG.md](https://github.com/ddsha441981/pulse_map/blob/main/CHANGELOG.md) in the repository root.
 
+## v0.6.4 (2026-08-19)
+
+### 🌍 Portable AtomicU64 — Cross-Platform Compatibility
+
+- Replaced `core::sync::atomic::AtomicU64` / `std::sync::atomic::AtomicU64` with `portable-atomic::AtomicU64` across `meta.rs` and `sync.rs`
+- Enables compilation on targets without native 64-bit atomics: WASM32, ARMv7-M, 32-bit embedded
+- No API changes — drop-in replacement
+
+---
+
 ## v0.6.2 (2026-08-11)
 
 ### ⚡ Lock-Free Reads + AccessBuffer + u64 TTL

@@ -6,6 +6,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [v0.6.4] — 2026-08-19
+
+### 🌍 Portable AtomicU64 — Cross-Platform Compatibility
+
+- **Replaced `core::sync::atomic::AtomicU64` / `std::sync::atomic::AtomicU64` with `portable-atomic::AtomicU64`** across `src/engine/meta.rs` and `src/sync.rs`
+- Enables the crate to compile and run on targets without native 64-bit atomics: **WASM32**, **ARMv7-M** (thumbv7m), and other **32-bit embedded platforms**
+- New dependency: `portable-atomic = { version = "1.6", default-features = false, features = ["fallback"] }`
+- **No API changes** — drop-in replacement, zero user-facing impact
+- CI already validates `thumbv7m-none-eabi` target; portable-atomic provides the fallback implementation where the CPU lacks `LDAXR`/`STLXR` 64-bit instructions
+
+---
+
 ## [v0.6.3] — 2026-08-17
 
 ### 📚 Documentation & Crates.io Links Fix

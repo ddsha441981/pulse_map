@@ -21,10 +21,10 @@
 //! assert_eq!(map.get(&42), Some(100));
 //! ```
 
+use portable_atomic::{AtomicU64, Ordering};
 use std::cell::UnsafeCell;
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicU8, AtomicUsize};
-use portable_atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, RwLock};
 
 use crate::engine::access_buffer::AccessBuffer;
