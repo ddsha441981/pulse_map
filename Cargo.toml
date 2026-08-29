@@ -1,6 +1,5 @@
 [workspace]
-members = [".", "fuzz"]
-exclude = []
+members = ["."]
 
 [package]
 name = "pulse_map"

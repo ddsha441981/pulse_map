@@ -1,3 +1,9 @@
+# Declaring an empty [workspace] here makes this crate its own isolated
+# workspace root — the cargo-fuzz convention. Without it, Cargo walks up to
+# the parent workspace and inherits [profile.release] (lto = true), which
+# breaks ASan linking inside cargo-fuzz's sanitizer pipeline.
+[workspace]
+
 [package]
 name = "pulse_map-fuzz"
 version = "0.0.0"
