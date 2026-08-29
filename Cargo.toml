@@ -79,10 +79,6 @@ opt-level = 3
 lto = true
 codegen-units = 1
 
-[profile.fuzz]
-inherits = "dev"
-opt-level = 1
-overflow-checks = false  # let sanitizers catch overflows, not rustc panics
 
 
 

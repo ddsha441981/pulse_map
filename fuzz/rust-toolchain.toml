@@ -1,2 +1,8 @@
 [toolchain]
-channel = "nightly"
+# Pinned to a date known to work with cargo-fuzz's sancov-module pass.
+# The floating `channel = "nightly"` caused __sancov_gen_ linker errors on
+# nightlies from 2026-01-30 onward (tested with cargo-fuzz 0.13.1 and 0.13.2).
+# Update this pin only after verifying `cargo fuzz run fuzz_sequences` links
+# cleanly with the default --sanitizer=address on the new date.
+channel  = "nightly-2025-12-01"
+components = ["llvm-tools-preview", "rust-src"]

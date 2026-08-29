@@ -128,6 +128,11 @@ fuzz_target!(|data: &[u8]| {
     let mut last_insert_val: [u8; MAX_VAL_LEN] = [0u8; MAX_VAL_LEN];
     let mut last_insert_val_len: usize = 0;
     let mut last_was_ttl: bool = false; // TTL inserts may expire, skip strict check
+    // Tracking validity flag. Needed because a key length of 0 is a legal key
+    // (the empty key), so `last_insert_key_len == 0` cannot double as "nothing
+    // tracked" — doing so makes a later get(&[]) compare against a stale value
+    // after a Remove has zeroed the lengths.
+    let mut last_insert_valid: bool = false;
 
     let mut remaining = data;
 
@@ -147,6 +152,7 @@ fuzz_target!(|data: &[u8]| {
                 last_insert_val[..vlen].copy_from_slice(&value[..vlen]);
                 last_insert_val_len = vlen;
                 last_was_ttl = false;
+                last_insert_valid = true;
 
                 // Invariant: capacity is never exceeded
                 assert!(
@@ -182,7 +188,8 @@ fuzz_target!(|data: &[u8]| {
 
                 // Stronger check: if we JUST inserted this exact key and got
                 // back Some, the returned value must match what we inserted.
-                if !last_was_ttl
+                if last_insert_valid
+                    && !last_was_ttl
                     && last_insert_key_len == key.len()
                     && &last_insert_key[..last_insert_key_len] == key
                 {
@@ -213,11 +220,13 @@ fuzz_target!(|data: &[u8]| {
                 );
 
                 // Invalidate last-insert tracking if we just removed that key
-                if last_insert_key_len == key.len()
+                if last_insert_valid
+                    && last_insert_key_len == key.len()
                     && &last_insert_key[..last_insert_key_len] == key
                 {
                     last_insert_key_len = 0;
                     last_insert_val_len = 0;
+                    last_insert_valid = false;
                 }
             }
 
