@@ -1,0 +1,27 @@
+# Declaring an empty [workspace] here makes this crate its own isolated
+# workspace root — the cargo-fuzz convention. Without it, Cargo walks up to
+# the parent workspace and inherits [profile.release] (lto = true), which
+# breaks ASan linking inside cargo-fuzz's sanitizer pipeline.
+[workspace]
+
+[package]
+name = "pulse_map-fuzz"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+
+[dependencies.pulse_map]
+path = ".."
+features = ["std"]
+
+[[bin]]
+name = "fuzz_sequences"
+path = "fuzz_targets/fuzz_sequences.rs"
+test = false
+doc = false

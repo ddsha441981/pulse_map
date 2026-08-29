@@ -1,3 +1,6 @@
+[workspace]
+members = ["."]
+
 [package]
 name = "pulse_map"
 version = "0.6.4"
@@ -74,6 +77,7 @@ required-features = ["std"]
 opt-level = 3
 lto = true
 codegen-units = 1
+
 
 
 
