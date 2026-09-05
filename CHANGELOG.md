@@ -53,6 +53,16 @@ A validation release, not a feature release: it exists to prove the correctness 
 - `fail-fast: false`, so one unsupported target can't mask the state of the other seven
 - Scope, stated plainly: these are compile checks. Nothing was executed on real silicon or under QEMU, and `cargo check` does not link — a downstream binary on thumbv6m or riscv32imc still has to supply the `critical-section` impl or it fails at link time
 
+
+**Runs on emulated Cortex-M hardware — PR #21**
+- PR #20 proved the crate *compiles* for 8 bare-metal targets. `cargo check` does not link and never executes an instruction, so the `critical-section` path on Cortex-M0 was still an untested claim. New `qemu-test/` crate closes that: a real `cortex-m-rt` binary, linked with a panic handler and a `memory.x`, booted under `qemu-system-arm` in CI
+- **Cortex-M0 is the case that matters.** ARMv6-M has no CAS instruction, so `MetaWord`'s `AtomicU64` can only work through `critical-section` — and `MetaWord::on_access` runs that CAS on every `get` hit. `-machine microbit` (nRF51822) is the only emulated ARM machine that is actually `thumbv6m`, so it is the only one that exercises the path. `-cpu cortex-m3` (`thumbv7m`, portable-atomic's spinlock fallback) runs alongside it as the control
+- 12 assertions: capacity, empty state, hit/miss, insert past 4× capacity to force eviction, then `peek` every key checking that no key ever reads back a value it was not stored with (absence is legal — which of a bucket's 4 slots loses is not observable — a wrong value never is), `eviction_count() > 0`, TTL live-then-expired by insertion count, and `remove`
+- Failures are real failures: the checks report through semihosting and exit `EXIT_FAILURE`, which propagates as a non-zero process exit to `cargo run` and fails the job. Verified by deliberately breaking one assertion and confirming CI-visible exit 1
+- **Measured: a map costs 128 bytes per bucket**, allocated upfront regardless of occupancy — 64 B for the cache-line `Bucket` plus 4 × 16 B of `SlotTTL` for its slots. Found the hard way: a 64-bucket map exhausted an 8 KiB heap. The test now runs 16 buckets / 2 KiB and prints its own heap usage (3072 B for three maps) into the CI log. The README's 40.0 B/entry figure is consistent with this, but bucket count, not entry count, is the number to budget with on a 16 KiB part
+- Still not covered, deliberately: `riscv32imc` (ESP32-C3). `qemu-system-riscv32 -machine virt` has the A extension, so emulating it would test a target that does not need the feature. And nothing has run on physical silicon
+- `qemu-test/` is its own workspace with its own `.cargo/config.toml` runner, the same isolation `fuzz/` uses, so it never affects a host build of `pulse_map`
+
 ---
 
 ## [v0.6.4] — 2026-08-19

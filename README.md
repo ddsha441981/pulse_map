@@ -394,9 +394,27 @@ ESP32-C3.
 pulse_map = { version = "0.6", default-features = false, features = ["critical-section"] }
 ```
 
-These are compile checks — nothing here has been executed on real silicon or under
-QEMU, and `cargo check` doesn't link, so supplying that `critical-section` impl is
-still on you.
+**Executed, not just compiled.** Two of those targets also run in CI, on emulated
+hardware rather than a `cargo check`: `qemu-test/` links a real `cortex-m-rt`
+binary and boots it under `qemu-system-arm` — `-cpu cortex-m3` and
+`-machine microbit` (nRF51822, Cortex-M0). It builds a map, inserts past capacity
+to force eviction, checks no key ever reads back a value it wasn't stored with,
+and exercises TTL expiry and `remove`; a failed check exits non-zero through
+semihosting, so CI catches it. Every `get` hit runs `MetaWord`'s `AtomicU64` CAS,
+which is the whole point on Cortex-M0 — that chip has no CAS instruction, so the
+map works there only through `critical-section`. That path is now known to work at
+runtime, not merely to typecheck.
+
+The remaining gap: `riscv32imc` (ESP32-C3) is still compile-checked only.
+`qemu-system-riscv32 -machine virt` has the A extension, so emulating it would
+test a different target than the one that needs the feature. And nothing here has
+run on physical silicon.
+
+**Sizing it for a small part.** A map costs **128 bytes per bucket**, allocated up
+front regardless of how many entries you store: 64 B for the cache-line `Bucket`,
+plus 4 × 16 B of TTL metadata for its four slots. So `TypedPulseMap::new(16)` is
+2 KiB for 64 nominal slots — the size the QEMU test uses, since a micro:bit has
+16 KiB of RAM in total. Budget by bucket count, not by entry count.
 
 **Memory.** Measured as RSS delta in a fresh child process per cache, capacity
 65,536 entries, filled to capacity, divided by entries actually resident:

@@ -1,0 +1,9 @@
+# `cargo run` hands the ELF straight to QEMU. Semihosting is what lets the guest
+# print and set the process exit code, so a failed assert fails the CI job.
+[target.thumbv7m-none-eabi]
+runner = "qemu-system-arm -cpu cortex-m3 -machine lm3s6965evb -nographic -semihosting-config enable=on,target=native -kernel"
+rustflags = ["-C", "link-arg=-Tlink.x"]
+
+[target.thumbv6m-none-eabi]
+runner = "qemu-system-arm -machine microbit -nographic -semihosting-config enable=on,target=native -kernel"
+rustflags = ["-C", "link-arg=-Tlink.x"]
