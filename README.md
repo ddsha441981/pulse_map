@@ -360,6 +360,87 @@ hit rate was still the highest of the four.
 
 ---
 
+## When `std` Isn't Available
+
+The comparisons above put PulseMap against three caches, but two of them can't
+be used at all in `no_std`: **QuickCache and Moka both require `std`**. With
+`default-features = false`, PulseMap needs only `alloc` — which narrows the real
+field in firmware, WASM, and bare-metal targets to **PulseMap vs `lru`**. That's
+the tier where PulseMap's design pays off most, and it does so on two axes at once.
+
+**Verified targets.** Each of these is its own `cargo check -p pulse_map
+--no-default-features` job in CI, run on every push:
+
+| Target | Chips | Needs |
+|---|---|---|
+| `thumbv7m-none-eabi` | Cortex-M3 | — |
+| `thumbv7em-none-eabihf` | Cortex-M4F / M7F (STM32F4, F7) | — |
+| `thumbv8m.main-none-eabi` | Cortex-M33 | — |
+| `thumbv6m-none-eabi` | Cortex-M0 / M0+ (RP2040) | `critical-section` |
+| `riscv32imac-unknown-none-elf` | RISC-V with the A extension | — |
+| `riscv32imc-unknown-none-elf` | ESP32-C3 | `critical-section` |
+| `aarch64-unknown-none` | 64-bit bare metal | — |
+| `wasm32-unknown-unknown` | WASM | — |
+
+`MetaWord` is an `AtomicU64`. ARMv6-M has no `LDREX`/`STREX`, and RISC-V without
+the A extension has no atomic instructions at all — so on those two targets
+`portable-atomic` has no CAS to build its 64-bit fallback out of, and doesn't
+define `AtomicU64` at all. The `critical-section` feature closes that by masking
+interrupts around the update. The impl comes from your HAL, not from PulseMap:
+`cortex-m` with its `critical-section-single-core` feature, or `esp-hal` on the
+ESP32-C3.
+
+```toml
+pulse_map = { version = "0.6", default-features = false, features = ["critical-section"] }
+```
+
+These are compile checks — nothing here has been executed on real silicon or under
+QEMU, and `cargo check` doesn't link, so supplying that `critical-section` impl is
+still on you.
+
+**Memory.** Measured as RSS delta in a fresh child process per cache, capacity
+65,536 entries, filled to capacity, divided by entries actually resident:
+
+| Cache | Key → Value | Bytes/entry | `no_std`? |
+|---|---|:-:|:-:|
+| **PulseMap** (inline mode) | `u32 → u32` | **40.0B** | ✅ (+`alloc`) |
+| QuickCache | `u64 → u64` | 67.9B | ❌ needs `std` |
+| `lru` | `u64 → u64` | 83.1B | ✅ (+`alloc`) |
+| PulseMap (slab mode) | `u64 → u64` | 113.2B | ✅ (+`alloc`) |
+| Moka | `u64 → u64` | 308.2B | ❌ needs `std` |
+
+Inline mode is what produces the 40.0B figure: when a key fits in **6 bytes or
+fewer** and its value in **7 bytes or fewer**, the entry lives inside the bucket
+itself and never touches the slab pool. Cross that window — a `u64` key is 8
+bytes and already does — and the same workload costs 113.2B/entry instead. If you
+control your key type, `u32`/`u16` keys are worth designing for.
+
+**Scan resistance.** LRU has a well-known failure mode: a single pass over a
+large key space flushes everything hot out of the cache. Measured with 1,000 keys
+touched 50× each, then 200,000 cold keys seen exactly once, capacity 65,536
+(survivors counted with `peek`, so the check itself doesn't promote anything):
+
+| Cache | Hot keys surviving the scan | Repeated-scan hit rate |
+|---|:-:|:-:|
+| **PulseMap** | **1000 / 1000** | **22.14%** |
+| QuickCache | 1000 / 1000 | 28.60% |
+| `lru` | **0 / 1000** | **0.00%** |
+
+`lru` loses every hot key and drops to a 0% hit rate on a repeating scan
+(200K keys × 10 rounds); PulseMap's LFU half keeps the frequently-touched keys
+resident. QuickCache's W-TinyLFU is equally scan-resistant — but it isn't
+available in `no_std`.
+
+**Practical read:** if you're on `no_std`, the choice is PulseMap or `lru`, and
+PulseMap gives you roughly half the memory per entry *and* scan resistance `lru`
+structurally cannot offer. One caveat to size for: PulseMap has 4 slots per
+bucket and no chaining, so a full bucket evicts even when its neighbour is empty
+— inserting exactly `capacity` distinct keys leaves ~81% of them resident.
+Allocate **1.3–1.5× the entries you need to keep resident**, and keep the working
+set well under nominal capacity.
+
+---
+
 ## Architecture
 
 ```
@@ -490,6 +571,7 @@ pulse_map/
 |---------|:-------:|-------------|
 | `std` | ✅ | `ConcurrentPulseMap`, `From<HashMap>`, std traits |
 | `simd` | ❌ | SSE2 H2 matching (x86_64 only) |
+| `critical-section` | ❌ | `AtomicU64` via interrupt masking, for targets with no atomic CAS (Cortex-M0/M0+, RISC-V without the A extension) |
 
 ```toml
 # Default
@@ -500,6 +582,9 @@ pulse_map = { version = "0.6", features = ["simd"] }
 
 # no_std (disables ConcurrentPulseMap)
 pulse_map = { version = "0.6", default-features = false }
+
+# no_std on a target without atomic CAS — see "When `std` Isn't Available"
+pulse_map = { version = "0.6", default-features = false, features = ["critical-section"] }
 ```
 
 > **Note:** `map[&key]` (Index trait) is not implemented. PulseMap returns owned `V` values,
