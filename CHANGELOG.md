@@ -74,6 +74,7 @@ A validation release, not a feature release: it exists to prove the correctness 
 - Three probe binaries under `qemu-test/src/bin/` (`footprint_none`, `footprint_pulse`, `footprint_lru`) plus `qemu-test/size.sh`. The no-cache baseline exists so the table measures the caches rather than `hprintln!` and the panic handler — it is 2,496 B of the total on thumbv6m. Host binutils `size` reads ARM ELF, so no `arm-none-eabi` toolchain is required
 - `qemu-test` release profile gained `lto = true` / `codegen-units = 1`, matching the parent crate and what real firmware ships. Without LTO the comparison measured un-inlined cross-crate glue nobody flashes, and it moved the numbers by thousands of bytes
 - Bump allocator extracted to `qemu-test/src/bump.rs` and shared by all four binaries
+- README's **Known Limitations** list now carries these as first-class entries rather than leaving them in prose: no MCU perf figure exists, `lru` wins on flash on M3-class parts, and every `get` hit CASes the `MetaWord` even single-threaded — which on M0 means reads disable interrupts
 - **Still not measured, and now stated in the README:** no throughput or latency figure on any MCU. QEMU is not cycle-accurate — no pipeline model, no flash wait states — so timing it would produce a number worth less than no number. Every performance figure in the docs is x86_64. Closing that needs real silicon; an RP2040 is the honest choice, being the Cortex-M0+ part that needs `critical-section`
 
 ---
