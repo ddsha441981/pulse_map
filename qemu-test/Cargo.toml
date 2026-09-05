@@ -1,0 +1,27 @@
+# Own [workspace] so this never joins the parent: it only ever builds for
+# bare-metal targets and carries its own .cargo/config.toml runner. Same reason
+# fuzz/ is isolated.
+[workspace]
+
+[package]
+name = "pulse_map-qemu-test"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+pulse_map = { path = "..", default-features = false }
+cortex-m = "0.7"
+cortex-m-rt = "0.7"
+cortex-m-semihosting = "0.5"
+# `exit` matters in CI: a panic must end the QEMU process, not spin forever.
+panic-semihosting = { version = "0.6", features = ["exit"] }
+
+[features]
+# Cortex-M0/M0+ has no atomic CAS, so pulse_map's AtomicU64 goes through a
+# critical section — and the impl belongs to the HAL, here cortex-m.
+m0 = ["pulse_map/critical-section", "cortex-m/critical-section-single-core"]
+
+[profile.release]
+# Costs nothing at runtime and makes a QEMU backtrace readable.
+debug = true

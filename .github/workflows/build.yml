@@ -149,6 +149,41 @@ jobs:
         run: cargo check -p pulse_map --target ${{ matrix.target }} --no-default-features ${{ matrix.extra }}
 
   # ═══════════════════════════════════════════════════════════
+  # QEMU (runs the no_std code, instead of only compiling it)
+  # ═══════════════════════════════════════════════════════════
+  # The no_std job above proves the crate compiles for these targets; cargo check
+  # does not even link. This one boots a real ELF on an emulated Cortex-M and
+  # exercises MetaWord's AtomicU64 CAS at runtime. Cortex-M0 is the case that
+  # matters: it has no CAS instruction at all, so the `critical-section` feature
+  # is the only thing making the map work there.
+  qemu:
+    name: QEMU (${{ matrix.machine }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: thumbv7m-none-eabi, machine: cortex-m3, extra: "" }
+          - { target: thumbv6m-none-eabi, machine: cortex-m0, extra: "--features m0" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: qemu-test
+      # qemu-system-arm only; its qemu-efi-aarch64 recommend is 322 MB of
+      # aarch64 UEFI firmware that nothing here boots.
+      - name: Install QEMU
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends qemu-system-arm
+      # Separate workspace with its own runner in .cargo/config.toml, so this
+      # cannot be driven from the repo root.
+      - name: Run on emulated hardware
+        working-directory: qemu-test
+        run: cargo run --release --target ${{ matrix.target }} ${{ matrix.extra }}
+
+  # ═══════════════════════════════════════════════════════════
   # MSRV (Minimum Supported Rust Version)
   # ═══════════════════════════════════════════════════════════
   msrv:
