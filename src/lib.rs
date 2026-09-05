@@ -869,6 +869,9 @@ mod tests {
 
     #[cfg(feature = "std")]
     #[test]
+    // Skipped under Miri: 16384 buckets with 4 × 1000 threaded inserts is the largest case in
+    // the suite; test_concurrent_multithread_read_write (4096) covers the same threaded path.
+    #[cfg_attr(miri, ignore)]
     fn test_concurrent_multithread_insert() {
         use std::sync::Arc;
         use std::thread;
