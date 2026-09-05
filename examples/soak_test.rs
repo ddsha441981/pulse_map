@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2026 Deendayal Kumawat. All rights reserved.
+// Copyright (c) 2026 Deendayal Kumawat. All rights reserved.
 // Licensed under the MIT OR Apache-2.0 license.
 
 //! 24-hour soak / endurance test for `ShardedPulseMap`.
@@ -57,9 +57,7 @@ fn parse_duration_secs(args: &[String]) -> u64 {
                 match v.parse::<u64>() {
                     Ok(n) if n >= MIN_DURATION_SECS => return n,
                     Ok(_) => {
-                        eprintln!(
-                            "error: --duration must be >= {MIN_DURATION_SECS} seconds"
-                        );
+                        eprintln!("error: --duration must be >= {MIN_DURATION_SECS} seconds");
                         process::exit(2);
                     }
                     Err(_) => {
@@ -97,11 +95,7 @@ fn read_rss_bytes() -> Option<u64> {
         let status = std::fs::read_to_string("/proc/self/status").ok()?;
         for line in status.lines() {
             if let Some(rest) = line.strip_prefix("VmRSS:") {
-                let kb: u64 = rest
-                    .split_whitespace()
-                    .next()?
-                    .parse()
-                    .ok()?;
+                let kb: u64 = rest.split_whitespace().next()?.parse().ok()?;
                 return Some(kb.saturating_mul(1024));
             }
         }
@@ -150,7 +144,10 @@ fn main() {
 
     println!("═══════════════════════════════════════════");
     println!("  ShardedPulseMap soak test");
-    println!("  duration={}s writers={NUM_WRITERS} readers={NUM_READERS}", duration_secs);
+    println!(
+        "  duration={}s writers={NUM_WRITERS} readers={NUM_READERS}",
+        duration_secs
+    );
     println!("  buckets/shard={BUCKETS_PER_SHARD} ttl={TTL_EPOCHS}");
     println!("═══════════════════════════════════════════\n");
 
@@ -162,35 +159,27 @@ fn main() {
     let fail = Arc::new(AtomicBool::new(false));
     let fail_reason = Arc::new(std::sync::Mutex::new(String::new()));
 
-    let set_fail = |reason: String| {
-        let mut g = fail_reason.lock().unwrap();
-        if g.is_empty() {
-            *g = reason;
-        }
-        fail.store(true, Ordering::SeqCst);
-        stop.store(true, Ordering::SeqCst);
-    };
-    let _ = &set_fail; // keep type-check happy when unused path
-
     // ── Writers ──
     let mut handles = Vec::new();
     for tid in 0..NUM_WRITERS {
         let map = Arc::clone(&map);
         let stop = Arc::clone(&stop);
         let ops = Arc::clone(&ops);
-        handles.push(thread::Builder::new()
-            .name(format!("writer-{tid}"))
-            .spawn(move || {
-                let mut i: u64 = tid as u64;
-                while !stop.load(Ordering::Relaxed) {
-                    // Spread keys so shards fill under TTL churn.
-                    let key = i.wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ (tid as u64) << 48;
-                    map.insert(key, key ^ 0xDEAD_BEEF);
-                    ops.fetch_add(1, Ordering::Relaxed);
-                    i = i.wrapping_add(NUM_WRITERS as u64);
-                }
-            })
-            .expect("spawn writer"));
+        handles.push(
+            thread::Builder::new()
+                .name(format!("writer-{tid}"))
+                .spawn(move || {
+                    let mut i: u64 = tid as u64;
+                    while !stop.load(Ordering::Relaxed) {
+                        // Spread keys so shards fill under TTL churn.
+                        let key = i.wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ (tid as u64) << 48;
+                        map.insert(key, key ^ 0xDEAD_BEEF);
+                        ops.fetch_add(1, Ordering::Relaxed);
+                        i = i.wrapping_add(NUM_WRITERS as u64);
+                    }
+                })
+                .expect("spawn writer"),
+        );
     }
 
     // ── Readers ──
@@ -198,18 +187,21 @@ fn main() {
         let map = Arc::clone(&map);
         let stop = Arc::clone(&stop);
         let ops = Arc::clone(&ops);
-        handles.push(thread::Builder::new()
-            .name(format!("reader-{tid}"))
-            .spawn(move || {
-                let mut i: u64 = tid as u64;
-                while !stop.load(Ordering::Relaxed) {
-                    let key = i.wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ ((tid as u64) % NUM_WRITERS as u64) << 48;
-                    let _ = map.get(&key);
-                    ops.fetch_add(1, Ordering::Relaxed);
-                    i = i.wrapping_add(NUM_READERS as u64);
-                }
-            })
-            .expect("spawn reader"));
+        handles.push(
+            thread::Builder::new()
+                .name(format!("reader-{tid}"))
+                .spawn(move || {
+                    let mut i: u64 = tid as u64;
+                    while !stop.load(Ordering::Relaxed) {
+                        let key = i.wrapping_mul(0x9E37_79B9_7F4A_7C15)
+                            ^ ((tid as u64) % NUM_WRITERS as u64) << 48;
+                        let _ = map.get(&key);
+                        ops.fetch_add(1, Ordering::Relaxed);
+                        i = i.wrapping_add(NUM_READERS as u64);
+                    }
+                })
+                .expect("spawn reader"),
+        );
     }
 
     let start = Instant::now();
@@ -274,9 +266,7 @@ fn main() {
 
         // Failure: eviction_count must be monotonic (never wraps/resets downward)
         if evictions < last_evictions {
-            let msg = format!(
-                "eviction_count decreased: {last_evictions} -> {evictions}"
-            );
+            let msg = format!("eviction_count decreased: {last_evictions} -> {evictions}");
             eprintln!("FAIL: {msg}");
             let mut g = fail_reason.lock().unwrap();
             if g.is_empty() {
