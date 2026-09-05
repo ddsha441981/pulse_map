@@ -84,12 +84,23 @@ println!("Evictions: {}", map.eviction_count());
 | Policy | Hit Rate | Overhead | Cache Misses |
 |--------|:--------:|:--------:|:------------:|
 | **PulseMap (LFU+LRU)** | ★★★★ | 7 bits/slot | **0 extra** |
-| LRU (linked list) | ★★★ | 16 bytes/entry | 2-3 |
+| LRU (linked list) | ★★★★ | 16 bytes/entry | 2-3 |
 | LFU (heap) | ★★★★ | 8+ bytes/entry | 3-4 |
 | FIFO | ★★ | 0 | 0 |
 | Random | ★ | 0 | 0 |
 
-PulseMap achieves **near-LFU hit rates** with **FIFO-level overhead**.
+PulseMap achieves **near-LFU hit rates** with **FIFO-level overhead** — the
+overhead column is where it wins, not the hit-rate column. Measured at equal
+capacity on a Zipf 1.3 workload, `PulseMap`/`TypedPulseMap` scores 96.76% against
+the `lru` crate's 96.77%: a tie, not a win. Two caveats worth knowing before you
+pick a policy on this table:
+
+- **`ConcurrentPulseMap` and `ShardedPulseMap` score 1.16 points lower** (95.60%
+  and 95.57%). Their `get` defers the priority update into an `AccessBuffer` that
+  nothing drains, so on a read-heavy workload eviction priority ends up driven by
+  inserts alone. The stars above describe the raw/typed path.
+- The stars are a qualitative ranking. For the actual numbers, and to re-run them,
+  see `cargo run --release --example eviction_quality_audit`.
 
 ## Tuning
 
