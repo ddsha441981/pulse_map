@@ -7,6 +7,10 @@
 // exercising insert / get / remove / peek / insert_ttl / TTL-epoch-advance
 // in random sequences and verifying key invariants after every operation.
 //
+// Every operation is mirrored into a shadow HashMap. The map is free to lose an
+// entry (eviction, TTL expiry), but a lookup that *does* hit must return the
+// value the shadow map recorded — see `check_hit`.
+//
 // Run:
 //   cargo fuzz run fuzz_sequences
 //   cargo fuzz run fuzz_sequences -- -max_total_time=60
@@ -15,6 +19,7 @@
 
 use libfuzzer_sys::fuzz_target;
 use pulse_map::PulseMap;
+use std::collections::HashMap;
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
@@ -29,7 +34,7 @@ const MAX_VAL_LEN: usize = 32;
 
 /// Consume `[len_byte, ...len_byte bytes...]` from `data`.
 /// Returns `(slice, remainder)`, or `None` if the stream is exhausted.
-fn read_bytes<'a>(data: &'a [u8], max_len: usize) -> Option<(&'a [u8], &'a [u8])> {
+fn read_bytes(data: &[u8], max_len: usize) -> Option<(&[u8], &[u8])> {
     let (&len_byte, rest) = data.split_first()?;
     let len = (len_byte as usize) % (max_len + 1); // clamp to [0, max_len]
     if rest.len() < len {
@@ -115,24 +120,43 @@ fn parse_op<'a>(data: &'a [u8]) -> Option<(Op<'a>, &'a [u8])> {
     }
 }
 
+// ── Shadow-map verification ─────────────────────────────────────────────────
+
+/// Assert the one thing eviction leaves intact: a hit must be the *right* hit.
+///
+/// `None` is always legal. The entry may have been evicted when its bucket
+/// overflowed, or expired via TTL, and neither is observable from outside — the
+/// caller cannot predict which of the 4 slots in a bucket loses. A non-`None`
+/// result is a different matter: it pins down that the fingerprint matched the
+/// right key, that the slab index pointed at the right entry, and that no
+/// eviction corrupted a neighbouring slot.
+fn check_hit(shadow: &HashMap<Vec<u8>, Vec<u8>>, key: &[u8], got: Option<&[u8]>) {
+    let Some(value) = got else { return };
+    match shadow.get(key) {
+        Some(expected) => assert_eq!(
+            value,
+            expected.as_slice(),
+            "wrong value for key {:?}: map returned {:?}, last insert was {:?}",
+            key,
+            value,
+            expected
+        ),
+        None => panic!(
+            "map returned {:?} for key {:?}, which was never inserted (or was removed)",
+            value, key
+        ),
+    }
+}
+
 // ── Fuzz entry point ────────────────────────────────────────────────────────
 
 fuzz_target!(|data: &[u8]| {
     let mut map = PulseMap::new(NUM_BUCKETS);
 
-    // We track the last inserted (key, value) so we can verify get() consistency
-    // when the bucket has enough room (i.e., we haven't overflowed it).
-    // Using fixed-size arrays on the stack to avoid heap allocation in the harness.
-    let mut last_insert_key: [u8; MAX_KEY_LEN] = [0u8; MAX_KEY_LEN];
-    let mut last_insert_key_len: usize = 0;
-    let mut last_insert_val: [u8; MAX_VAL_LEN] = [0u8; MAX_VAL_LEN];
-    let mut last_insert_val_len: usize = 0;
-    let mut last_was_ttl: bool = false; // TTL inserts may expire, skip strict check
-    // Tracking validity flag. Needed because a key length of 0 is a legal key
-    // (the empty key), so `last_insert_key_len == 0` cannot double as "nothing
-    // tracked" — doing so makes a later get(&[]) compare against a stale value
-    // after a Remove has zeroed the lengths.
-    let mut last_insert_valid: bool = false;
+    // Shadow copy of every insert and remove. Only ever consulted to check a
+    // hit, never to demand one. Built per input, so it stays as small as the
+    // input is short.
+    let mut shadow: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
 
     let mut remaining = data;
 
@@ -143,101 +167,36 @@ fuzz_target!(|data: &[u8]| {
             // ── Insert ──────────────────────────────────────────────────────
             Op::Insert { key, value } => {
                 map.insert(key, value);
-
-                // Track for post-insert get() verification
-                let klen = key.len().min(MAX_KEY_LEN);
-                let vlen = value.len().min(MAX_VAL_LEN);
-                last_insert_key[..klen].copy_from_slice(&key[..klen]);
-                last_insert_key_len = klen;
-                last_insert_val[..vlen].copy_from_slice(&value[..vlen]);
-                last_insert_val_len = vlen;
-                last_was_ttl = false;
-                last_insert_valid = true;
-
-                // Invariant: capacity is never exceeded
-                assert!(
-                    map.len() <= map.capacity(),
-                    "len {} exceeded capacity {}",
-                    map.len(),
-                    map.capacity()
-                );
+                shadow.insert(key.to_vec(), value.to_vec());
             }
 
             // ── Get ─────────────────────────────────────────────────────────
             Op::Get { key } => {
-                // Must never panic
-                let result = map.get(key);
-
-                // If this exact key was the last thing we inserted (and it wasn't
-                // a TTL insert), the map *should* return Some — unless it was
-                // evicted (which happens when the bucket is full). We can't know
-                // for certain whether eviction happened without reimplementing the
-                // map logic here, so we only assert the weaker property: if the
-                // map returns Some, the data is non-empty (no zero-length slice
-                // corruption).
-                if let Some(val_bytes) = result {
-                    // Returned slice must be internally consistent — it should
-                    // point into valid memory (the sanitizer will catch UB).
-                    // We do a shallow byte read to force the memory access.
-                    let _ = val_bytes.len();
-                    if !val_bytes.is_empty() {
-                        let _ = val_bytes[0];
-                        let _ = val_bytes[val_bytes.len() - 1];
-                    }
-                }
-
-                // Stronger check: if we JUST inserted this exact key and got
-                // back Some, the returned value must match what we inserted.
-                if last_insert_valid
-                    && !last_was_ttl
-                    && last_insert_key_len == key.len()
-                    && &last_insert_key[..last_insert_key_len] == key
-                {
-                    if let Some(val_bytes) = result {
-                        assert_eq!(
-                            val_bytes,
-                            &last_insert_val[..last_insert_val_len],
-                            "get() after insert() returned wrong value"
-                        );
-                    }
-                    // Note: result == None is allowed because the bucket may have
-                    // been full and the insert evicted a different key instead,
-                    // or the bucket itself evicted *our* key under pressure.
-                }
+                // Must never panic, and must never hand back a wrong value.
+                check_hit(&shadow, key, map.get(key));
             }
 
             // ── Remove ──────────────────────────────────────────────────────
             Op::Remove { key } => {
                 let was_present = map.remove(key);
+                shadow.remove(key);
 
-                // Invariant: after remove(), get() must return None
-                let after = map.get(key);
+                // remove() is the one operation whose *absence* is checkable:
+                // nothing may resurrect the key.
                 assert!(
-                    after.is_none(),
+                    map.get(key).is_none(),
                     "get() returned Some after remove() for key {:?} (was_present={})",
                     key,
                     was_present
                 );
-
-                // Invalidate last-insert tracking if we just removed that key
-                if last_insert_valid
-                    && last_insert_key_len == key.len()
-                    && &last_insert_key[..last_insert_key_len] == key
-                {
-                    last_insert_key_len = 0;
-                    last_insert_val_len = 0;
-                    last_insert_valid = false;
-                }
             }
 
             // ── Peek ────────────────────────────────────────────────────────
             Op::Peek { key } => {
-                // peek() must never panic and must be consistent with get():
-                // if peek() returns None, get() must also return None.
                 let peek_result = map.peek(key);
                 let get_result = map.get(key);
 
-                // Both should agree on presence.
+                // Both must agree on presence.
                 assert_eq!(
                     peek_result.is_some(),
                     get_result.is_some(),
@@ -246,44 +205,31 @@ fuzz_target!(|data: &[u8]| {
                     peek_result.map(|b| b.len()),
                     get_result.map(|b| b.len()),
                 );
+                check_hit(&shadow, key, peek_result);
+                check_hit(&shadow, key, get_result);
             }
 
             // ── InsertTtl ───────────────────────────────────────────────────
             Op::InsertTtl { key, value, ttl } => {
                 map.insert_ttl(key, value, ttl);
-                last_was_ttl = true; // TTL entries may expire; skip strict get check
-
-                // Invariant: capacity is never exceeded
-                assert!(
-                    map.len() <= map.capacity(),
-                    "len {} exceeded capacity {} after insert_ttl",
-                    map.len(),
-                    map.capacity()
-                );
+                shadow.insert(key.to_vec(), value.to_vec());
             }
 
             // ── AdvanceEpoch ────────────────────────────────────────────────
             Op::AdvanceEpoch { steps } => {
-                // Insert `steps` dummy keys to advance the internal epoch counter,
-                // which triggers lazy TTL expiry on subsequent reads.
+                // Dummy inserts to advance the internal epoch counter, which
+                // triggers lazy TTL expiry on subsequent reads. They are real
+                // inserts, so they are mirrored too.
                 for i in 0..steps {
                     let dummy_key = [0xAA, i, 0xFF];
                     let dummy_val = [0x00];
                     map.insert(&dummy_key, &dummy_val);
+                    shadow.insert(dummy_key.to_vec(), dummy_val.to_vec());
                 }
-                last_was_ttl = true; // state is now mixed; disable strict check
-
-                // Invariant: still sane after epoch advance
-                assert!(
-                    map.len() <= map.capacity(),
-                    "len {} exceeded capacity {} after epoch advance",
-                    map.len(),
-                    map.capacity()
-                );
             }
         }
 
-        // ── Global invariants (checked every iteration) ─────────────────────
+        // ── Global invariants (checked after every operation) ────────────────
 
         // len() must be consistent with capacity()
         assert!(
