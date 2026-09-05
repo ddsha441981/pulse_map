@@ -82,6 +82,23 @@ jobs:
         run: cargo test -p pulse_map --features simd
 
   # ═══════════════════════════════════════════════════════════
+  # Miri (undefined behavior in unsafe code)
+  # ═══════════════════════════════════════════════════════════
+  miri:
+    name: Miri
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: miri
+      - name: Run Miri (core engine, no_std path)
+        run: cargo miri test -p pulse_map --no-default-features
+      # --lib skips doc-tests: they re-run the same code paths at roughly the same cost.
+      - name: Run Miri (std, concurrent + sharded)
+        run: cargo miri test -p pulse_map --lib
+
+  # ═══════════════════════════════════════════════════════════
   # Embedded no_std Check
   # ═══════════════════════════════════════════════════════════
   no_std:

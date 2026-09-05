@@ -186,6 +186,10 @@ mod tests {
     use std::thread;
 
     #[test]
+    // Skipped under Miri: 16 shards × 16384 buckets = 16 MB of tracked allocation, measured at
+    // >17 min and 2.2 GB RSS without finishing. test_sharded_resize_all (1024/shard) exercises
+    // the same insert+get path at 1/16 the size.
+    #[cfg_attr(miri, ignore)]
     fn test_sharded_basic_insert_get() {
         // 16384 buckets/shard → 65K slots/shard. 1000 keys / 16 shards ≈ 62/shard = 0.1% load.
         // Eliminates bucket collisions so we can assert exact retrieval.
@@ -203,6 +207,8 @@ mod tests {
     }
 
     #[test]
+    // Skipped under Miri: same 16 MB of buckets, plus 40K inserts across 4 threads.
+    #[cfg_attr(miri, ignore)]
     fn test_sharded_concurrent_4thread() {
         // 16384 buckets/shard. 40K keys / 16 shards = 2500/shard → ~0.6% load.
         let map = Arc::new(ShardedPulseMap::<u32, u32>::new(16384));
