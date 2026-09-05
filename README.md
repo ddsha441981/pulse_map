@@ -405,16 +405,53 @@ which is the whole point on Cortex-M0 — that chip has no CAS instruction, so t
 map works there only through `critical-section`. That path is now known to work at
 runtime, not merely to typecheck.
 
-The remaining gap: `riscv32imc` (ESP32-C3) is still compile-checked only.
-`qemu-system-riscv32 -machine virt` has the A extension, so emulating it would
-test a different target than the one that needs the feature. And nothing here has
-run on physical silicon.
+The remaining gaps: `riscv32imc` (ESP32-C3) is still compile-checked only —
+`qemu-system-riscv32 -machine virt` has the A extension, so emulating it would test
+a different target than the one that needs the feature. Nothing here has run on
+physical silicon. And **no throughput or latency number below was measured on an
+MCU** — QEMU is not cycle-accurate (no pipeline model, no flash wait states), so
+timing it would produce a number worth less than no number at all. Those figures
+are x86_64.
 
 **Sizing it for a small part.** A map costs **128 bytes per bucket**, allocated up
 front regardless of how many entries you store: 64 B for the cache-line `Bucket`,
 plus 4 × 16 B of TTL metadata for its four slots. So `TypedPulseMap::new(16)` is
 2 KiB for 64 nominal slots — the size the QEMU test uses, since a micro:bit has
 16 KiB of RAM in total. Budget by bucket count, not by entry count.
+
+**Allocator discipline, measured on the emulated Cortex-M0.** `alloc` is required,
+but only at construction — which is the difference between "unusable in my
+firmware" and "one static arena in `main`". Counted by instrumenting the global
+allocator in `qemu-test/`:
+
+| Map | Allocations at `new()` | Allocations during 256 `insert`+`get`+`remove` |
+|---|:-:|:-:|
+| `TypedPulseMap<u32, u32>` (inline) | 2 | **0** |
+| `TypedPulseMap<u64, u64>` (slab) | 2 | 14 per 6 inserts |
+
+The two are the `buckets` and `slots_ttl` vectors. Inline mode never allocates
+again, so a fixed arena of `buckets × 128` bytes is sufficient for the lifetime of
+the map. `u64` keys and values exceed the 6-byte key / 7-byte value inline window,
+so each entry reaches the slab and heap-allocates — a static arena is **not**
+enough there, and that path needs a real allocator.
+
+**Against `lru` on the emulated Cortex-M0.** Same workload, same target, same
+`lto = true` profile, both holding 64 resident entries. `lru` is the only other
+cache in the comparison above that builds without `std`:
+
+| | Flash over baseline | RAM | Allocations |
+|---|:-:|:-:|:-:|
+| **PulseMap** | 7,376 B | **2,048 B** — 32 B/entry | **2** |
+| `lru` | 7,208 B | 4,520 B — 70.6 B/entry | 68 |
+
+Same 64 entries in **55% less RAM**, touching the allocator twice instead of 68
+times. Flash is a wash here — 168 bytes apart, 2.3%. On Cortex-M3 it is not:
+PulseMap costs 9,864 B to `lru`'s 7,744 B, because portable-atomic's spinlock
+`AtomicU64` fallback is fatter than the critical-section route M0 takes. If flash
+is your binding constraint on an M3-class part, `lru` is smaller.
+
+Reproduce with `cd qemu-test && ./size.sh`. The baseline subtracted out is a third
+binary with no cache at all, so the table is not measuring `hprintln!`.
 
 **Memory.** Measured as RSS delta in a fresh child process per cache, capacity
 65,536 entries, filled to capacity, divided by entries actually resident:
