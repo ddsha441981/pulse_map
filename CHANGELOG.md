@@ -17,7 +17,7 @@ A validation release, not a feature release: it exists to prove the correctness 
 - `fuzz/` is its own workspace so it no longer inherits the root `lto = true`, which broke the sanitizer link step with undefined `__sancov_gen_` symbols
 - Measured: **4,282,559 executions clean under AddressSanitizer** (181 s)
 - The packaged crate is unaffected — `cargo package --list` contains zero fuzz files
-- Full shadow-map verification of eviction correctness is still open as issue #15
+- Verified only the most recent insert; eviction correctness for every earlier entry followed in issue #15 below
 
 **24-hour soak example (`examples/soak_test.rs`) — issue #8, PR #14 (@VedantMadane)**
 - 8 writer + 4 reader threads against `ShardedPulseMap`, with RSS leak detection via `/proc/self/status` and sentinel-key integrity checks
@@ -29,6 +29,13 @@ A validation release, not a feature release: it exists to prove the correctness 
 - **Both clean: no undefined behaviour and no leak reports.** First validation of `SlabPool`'s manual `alloc` / `realloc` / `dealloc` pairing and the `repr(C, packed)` `Slot` accesses against Stacked Borrows and provenance rules — AddressSanitizer only sees machine-level errors, never aliasing violations
 - Three oversized tests carry `#[cfg_attr(miri, ignore)]` (16 shards x 16384 buckets is 16 MB of tracked allocation: measured at 2.2 GB RSS for 17 minutes without finishing). `cargo test` is unaffected — 58 passed, 0 ignored, because `cfg(miri)` never fires on a normal build
 - `fuzz/rust-toolchain.toml`: restored the `components` line that 851b7dc dropped along with the nightly pin; `cargo fuzz coverage` needs `llvm-tools-preview`
+
+**Shadow-map eviction correctness in the fuzz harness — issue #15, PR #18**
+- Every operation is now mirrored into a `HashMap<Vec<u8>, Vec<u8>>`, and any `get` / `peek` that returns a value must match what the shadow map recorded. Absence stays legal — which of the 4 slots in a bucket loses is not observable from outside, and TTL expiry is a second source of legitimate absence — but a wrong value never is, and neither is a hit for a key that was removed
+- This is what closes the one acceptance criterion #7 could not: the harness from PR #13 tracked only the most recent insert in fixed stack arrays, so every earlier entry went unverified once a bucket overflowed and eviction began replacing slots
+- A fingerprint collision cannot make the assertion fire spuriously: `matches_key` (`src/engine/slot.rs:138`) compares the full key in both inline and slab mode, using the 46-bit extended fingerprint only as a pre-filter
+- Measured: **5,455,722 executions clean under AddressSanitizer** (1,202 s, 16 buckets so eviction pressure is constant). Throughput is 6.5K exec/s from an empty corpus against the 23.6K/s recorded in #13, the cost of one `Vec` allocation per mirrored insert
+- The harness is 54 lines shorter than before, and `cargo clippy` on `fuzz/` is now warning-free
 
 ---
 
