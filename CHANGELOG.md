@@ -6,6 +6,32 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [Unreleased] — v0.6.5
+
+### 🔬 Validation & Hardening
+
+A validation release, not a feature release: it exists to prove the correctness of the `unsafe` code that is already shipping. `src/` carries no logic changes — only three test attributes.
+
+**cargo-fuzz harness (`fuzz/`) — issue #7, PR #13 (@saiteja00743)**
+- New `fuzz_sequences` target driving random `insert` / `get` / `remove` sequences with TTL and eviction pressure, re-reading the last insert to catch silent corruption
+- `fuzz/` is its own workspace so it no longer inherits the root `lto = true`, which broke the sanitizer link step with undefined `__sancov_gen_` symbols
+- Measured: **4,282,559 executions clean under AddressSanitizer** (181 s)
+- The packaged crate is unaffected — `cargo package --list` contains zero fuzz files
+- Full shadow-map verification of eviction correctness is still open as issue #15
+
+**24-hour soak example (`examples/soak_test.rs`) — issue #8, PR #14 (@VedantMadane)**
+- 8 writer + 4 reader threads against `ShardedPulseMap`, with RSS leak detection via `/proc/self/status` and sentinel-key integrity checks
+- Measured: **147.9M ops in 10 s at +0.0 MB RSS drift**; a 190 s run reached 1.82B ops with monotonically increasing eviction counts
+- Caveat: at the documented parameters the map saturates to 100% load within a second, so the run exercises eviction churn rather than TTL expiry. `ConcurrentPulseMap` picks slots with `find_free_slot()` (`src/sync.rs:345`), not the `find_free_or_expired()` that `PulseMapRaw` uses (`src/raw.rs:178`), so there is no insert-time reclaim of expired slots to exercise
+
+**Miri in CI — issue #11, PR #16**
+- New `miri` job running two configurations: `cargo miri test -p pulse_map --no-default-features` (engine, `PulseMapRaw`, `TypedPulseMap`) and `cargo miri test -p pulse_map --lib`, which adds `ConcurrentPulseMap` and `ShardedPulseMap`
+- **Both clean: no undefined behaviour and no leak reports.** First validation of `SlabPool`'s manual `alloc` / `realloc` / `dealloc` pairing and the `repr(C, packed)` `Slot` accesses against Stacked Borrows and provenance rules — AddressSanitizer only sees machine-level errors, never aliasing violations
+- Three oversized tests carry `#[cfg_attr(miri, ignore)]` (16 shards x 16384 buckets is 16 MB of tracked allocation: measured at 2.2 GB RSS for 17 minutes without finishing). `cargo test` is unaffected — 58 passed, 0 ignored, because `cfg(miri)` never fires on a normal build
+- `fuzz/rust-toolchain.toml`: restored the `components` line that 851b7dc dropped along with the nightly pin; `cargo fuzz coverage` needs `llvm-tools-preview`
+
+---
+
 ## [v0.6.4] — 2026-08-19
 
 ### 🌍 Portable AtomicU64 — Cross-Platform Compatibility
