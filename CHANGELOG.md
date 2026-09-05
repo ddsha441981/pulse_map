@@ -10,7 +10,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### 🔬 Validation & Hardening
 
-A validation release, not a feature release: it exists to prove the correctness of the `unsafe` code that is already shipping. `src/` carries no logic changes — only three test attributes.
+A validation release, not a feature release: it exists to prove the correctness of the `unsafe` and lock-free code that is already shipping. `src/` carries no logic changes — only test attributes and cfg-gated atomic imports.
 
 **cargo-fuzz harness (`fuzz/`) — issue #7, PR #13 (@saiteja00743)**
 - New `fuzz_sequences` target driving random `insert` / `get` / `remove` sequences with TTL and eviction pressure, re-reading the last insert to catch silent corruption
@@ -29,6 +29,14 @@ A validation release, not a feature release: it exists to prove the correctness 
 - **Both clean: no undefined behaviour and no leak reports.** First validation of `SlabPool`'s manual `alloc` / `realloc` / `dealloc` pairing and the `repr(C, packed)` `Slot` accesses against Stacked Borrows and provenance rules — AddressSanitizer only sees machine-level errors, never aliasing violations
 - Three oversized tests carry `#[cfg_attr(miri, ignore)]` (16 shards x 16384 buckets is 16 MB of tracked allocation: measured at 2.2 GB RSS for 17 minutes without finishing). `cargo test` is unaffected — 58 passed, 0 ignored, because `cfg(miri)` never fires on a normal build
 - `fuzz/rust-toolchain.toml`: restored the `components` line that 851b7dc dropped along with the nightly pin; `cargo fuzz coverage` needs `llvm-tools-preview`
+
+**loom models for the lock-free paths — issue #9, PR #19**
+- New `Loom` CI job and two models covering the only two places in the engine that mutate shared state without holding a lock: `MetaWord::on_access` (`tests/loom_meta.rs`) and `AccessBuffer` push/drain (`tests/loom_access_buffer.rs`). `cargo test` exercises these with real threads, which samples one interleaving per run; loom enumerates them
+- `on_access` is held to its exact contract: two threads touching distinct slots must each land their freq increment, and the recency pair can only end as (7,6) or (6,7) — the two serializations and nothing in between; two threads on the same slot must count both hits, and the untouched slot must decay exactly twice. Verified load-bearing: replacing the CAS with a plain store fails both tests
+- `AccessBuffer` is held to its lossy contract — dropped events are acceptable, wrong ones are not: no fabricated event, none delivered twice, and the `EMPTY` sentinel never handed out as data
+- Measured, real wall clock: **0.44 s for the 2 `MetaWord` models, 9.10 s for the 2 buffer models**, against the 5-minute ceiling in the issue
+- Known limit, documented in the test file: the buffer model does not cover the store order inside `push`. Releasing the new head before writing the payload is a real bug that loses the event, and both tests still pass on it — loom explored 6 executions at every preemption bound tried (1, 2, 3, 5 and the default unbounded) and never scheduled the drain between the two stores. Removing the payload store outright does fail both tests, so the assertions themselves are live
+- `--cfg loom` swaps the atomics in `meta.rs` and `access_buffer.rs` for loom's instrumented ones, and `MetaWord::empty()` loses `const` in that configuration only. **Normal builds are untouched**: loom is a `[target.'cfg(loom)'.dependencies]` entry, so it is resolved into `Cargo.lock` but never compiled — a plain `cargo build -v` passes no `--extern loom`. Both test files are `#![cfg(loom)]`, keeping the 58 unit tests away from loom atomics they would panic on
 
 ---
 
