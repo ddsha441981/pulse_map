@@ -52,6 +52,10 @@ mod sync;
 mod traits;
 
 // ── Re-exports ──
+// `AccessBuffer` is internal; `--cfg loom` exposes it so `tests/loom_access_buffer.rs`
+// can reach it. Normal builds are unaffected — the public API is unchanged.
+#[cfg(loom)]
+pub use crate::engine::access_buffer::AccessBuffer;
 pub use crate::engine::bucket::Bucket;
 pub use crate::engine::meta::MetaWord;
 pub use crate::engine::slot::Slot;

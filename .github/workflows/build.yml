@@ -99,6 +99,24 @@ jobs:
         run: cargo miri test -p pulse_map --lib
 
   # ═══════════════════════════════════════════════════════════
+  # loom (concurrency interleavings in lock-free code)
+  # ═══════════════════════════════════════════════════════════
+  loom:
+    name: Loom
+    runs-on: ubuntu-latest
+    env:
+      RUSTFLAGS: --cfg loom
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # Only the loom_* integration tests. `--cfg loom` swaps the engine's atomics
+      # for loom's instrumented ones, which panic outside a `loom::model`, so the
+      # 58 unit tests deliberately stay out of this job.
+      - name: Run loom models
+        run: cargo test -p pulse_map --test loom_meta --test loom_access_buffer
+
+  # ═══════════════════════════════════════════════════════════
   # Embedded no_std Check
   # ═══════════════════════════════════════════════════════════
   no_std:
