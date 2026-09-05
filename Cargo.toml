@@ -24,10 +24,23 @@ readme = "README.md"
 portable-atomic = { version = "1.6", default-features = false, features = ["fallback"] }
 wyhash = "0.5"
 
+# loom is only resolved when `--cfg loom` is in RUSTFLAGS. It must be a regular
+# dependency, not a dev-dependency: `src/engine/{meta,access_buffer}.rs` import it,
+# and the plain lib build that `tests/loom_*.rs` links against has no dev-dependencies.
+[target.'cfg(loom)'.dependencies]
+loom = "0.7"
+
 [features]
 default = ["std"]
 std = []
 simd = []
+
+# `cfg(loom)` is set through RUSTFLAGS, so rustc's --check-cfg (1.80+) would otherwise
+# warn on every `#[cfg(loom)]` and fail CI's `clippy -D warnings`.
+# Ignored with an "unused manifest key" warning on cargo < 1.74, which is fine:
+# --check-cfg did not exist then either.
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(loom)'] }
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }

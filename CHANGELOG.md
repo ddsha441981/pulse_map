@@ -10,7 +10,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### 🔬 Validation & Hardening
 
-A validation release, not a feature release: it exists to prove the correctness of the `unsafe` code that is already shipping. `src/` carries no logic changes — only three test attributes.
+A validation release, not a feature release: it exists to prove the correctness of the `unsafe` and lock-free code that is already shipping. `src/` carries no logic changes — only test attributes and cfg-gated atomic imports.
 
 **cargo-fuzz harness (`fuzz/`) — issue #7, PR #13 (@saiteja00743)**
 - New `fuzz_sequences` target driving random `insert` / `get` / `remove` sequences with TTL and eviction pressure, re-reading the last insert to catch silent corruption
@@ -36,6 +36,14 @@ A validation release, not a feature release: it exists to prove the correctness 
 - A fingerprint collision cannot make the assertion fire spuriously: `matches_key` (`src/engine/slot.rs:138`) compares the full key in both inline and slab mode, using the 46-bit extended fingerprint only as a pre-filter
 - Measured: **5,455,722 executions clean under AddressSanitizer** (1,202 s, 16 buckets so eviction pressure is constant). Throughput is 6.5K exec/s from an empty corpus against the 23.6K/s recorded in #13, the cost of one `Vec` allocation per mirrored insert
 - The harness is 54 lines shorter than before, and `cargo clippy` on `fuzz/` is now warning-free
+
+**loom models for the lock-free paths — issue #9, PR #19**
+- New `Loom` CI job and two models covering the only two places in the engine that mutate shared state without holding a lock: `MetaWord::on_access` (`tests/loom_meta.rs`) and `AccessBuffer` push/drain (`tests/loom_access_buffer.rs`). `cargo test` exercises these with real threads, which samples one interleaving per run; loom enumerates them
+- `on_access` is held to its exact contract: two threads touching distinct slots must each land their freq increment, and the recency pair can only end as (7,6) or (6,7) — the two serializations and nothing in between; two threads on the same slot must count both hits, and the untouched slot must decay exactly twice. Verified load-bearing: replacing the CAS with a plain store fails both tests
+- `AccessBuffer` is held to its lossy contract — dropped events are acceptable, wrong ones are not: no fabricated event, none delivered twice, and the `EMPTY` sentinel never handed out as data
+- Measured, real wall clock: **0.44 s for the 2 `MetaWord` models, 9.10 s for the 2 buffer models**, against the 5-minute ceiling in the issue
+- Known limit, documented in the test file: the buffer model does not cover the store order inside `push`. Releasing the new head before writing the payload is a real bug that loses the event, and both tests still pass on it — loom explored 6 executions at every preemption bound tried (1, 2, 3, 5 and the default unbounded) and never scheduled the drain between the two stores. Removing the payload store outright does fail both tests, so the assertions themselves are live
+- `--cfg loom` swaps the atomics in `meta.rs` and `access_buffer.rs` for loom's instrumented ones, and `MetaWord::empty()` loses `const` in that configuration only. **Normal builds are untouched**: loom is a `[target.'cfg(loom)'.dependencies]` entry, so it is resolved into `Cargo.lock` but never compiled — a plain `cargo build -v` passes no `--extern loom`. Both test files are `#![cfg(loom)]`, keeping the 58 unit tests away from loom atomics they would panic on
 
 ---
 

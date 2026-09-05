@@ -10,7 +10,13 @@
 //! [27..0]  Priorities: 4 × 7-bit (freq[4] + recency[3])
 //! ```
 
+#[cfg(not(loom))]
 use portable_atomic::{AtomicU64, Ordering};
+
+// Under `--cfg loom` the atomics are swapped for loom's instrumented ones so
+// `tests/loom_meta.rs` can explore every interleaving of the `on_access` CAS loop.
+#[cfg(loom)]
+use loom::sync::atomic::{AtomicU64, Ordering};
 
 use crate::SlotState;
 
@@ -24,8 +30,19 @@ pub struct MetaWord(AtomicU64);
 
 impl MetaWord {
     /// Empty metadata word (all slots empty, no fingerprints, no priority).
+    #[cfg(not(loom))]
     #[inline]
     pub const fn empty() -> Self {
+        Self(AtomicU64::new(0))
+    }
+
+    /// Empty metadata word (all slots empty, no fingerprints, no priority).
+    ///
+    /// Not `const` under `--cfg loom`: loom's `AtomicU64::new` registers the atomic
+    /// with the running model, so it cannot be a `const fn`.
+    #[cfg(loom)]
+    #[inline]
+    pub fn empty() -> Self {
         Self(AtomicU64::new(0))
     }
 

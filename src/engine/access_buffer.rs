@@ -13,7 +13,13 @@
 //! access event only slightly delays priority promotion, and under high load
 //! (when the buffer fills), eviction accuracy matters less than read latency.
 
+#[cfg(not(loom))]
 use core::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
+
+// See the note in `meta.rs`: `--cfg loom` swaps in loom's instrumented atomics
+// for `tests/loom_access_buffer.rs`.
+#[cfg(loom)]
+use loom::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 
 /// A single access event: which bucket and slot were accessed.
 #[repr(C)]
