@@ -72,6 +72,9 @@ required-features = ["std"]
 [[example]]
 name = "real_world_latency_spikes"
 required-features = ["std"]
+[[example]]
+name = "soak_test"
+required-features = ["std"]
 
 [profile.release]
 opt-level = 3
