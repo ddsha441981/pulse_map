@@ -96,6 +96,10 @@ required-features = ["std"]
 name = "soak_test"
 required-features = ["std"]
 
+[[example]]
+name = "eviction_quality_audit"
+required-features = ["std"]
+
 [profile.release]
 opt-level = 3
 lto = true

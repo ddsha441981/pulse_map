@@ -303,28 +303,51 @@ never written to won't show up in RSS even if it was "reserved."
 
 Speed alone doesn't prove an eviction policy is smart — it could just be
 evicting fast and wrong. This measures hit rate under memory pressure:
-capacity fixed at 10% of the key space, Zipfian-distributed access
-(exponent 1.3, a realistic hot/cold pattern), single-threaded so
+Zipfian-distributed access (exponent 1.3, a realistic hot/cold pattern) over
+a key space of 100,000, get-then-insert-on-miss, single-threaded so
 lock-contention noise doesn't muddy the comparison between policies. Each
 cache saw the identical access sequence per trial; 5 seeded trials, mean ±
 stddev reported.
 
-Tested across three read/write ratios (80/20, 99/1, and 100%
-cache-fill-on-miss) to confirm the result holds regardless of workload
-shape:
+**Every cache below holds the same 16,384 entries.** PulseMap's capacity is
+always `buckets × 4` with `buckets` rounded up to a power of two, so a round
+10,000 is not reachable — 16,384 is the nearest budget both sides can be
+given. Re-run the whole table with
+`cargo run --release --example eviction_quality_audit`.
 
-| Cache | Hit Rate (mean ± stddev, consistent across all ratios tested) |
-|---|:-:|
-| **PulseMap** | **96.73% ± 0.01%** |
-| QuickCache | 96.49% ± 0.01% |
-| Moka | 96.40–96.45% ± 0.01% |
-| LRU (`lru` crate) | 95.83% ± 0.01% |
+| Cache | Resident entries | Hit rate (mean ± stddev) | Reads update priority |
+|---|:-:|:-:|:-:|
+| `lru` crate | 16,384 | **96.77% ± 0.01%** | yes |
+| `PulseMap` / `TypedPulseMap` | 16,354 | **96.76% ± 0.01%** | yes |
+| `ConcurrentPulseMap` | 16,354 | 95.60% ± 0.04% | **no** |
+| `ShardedPulseMap` | 16,344 | 95.57% ± 0.02% | **no** |
 
-PulseMap's LFU+LRU hybrid produced the highest hit rate of all four caches
-tested, beating Moka's TinyLFU by ~0.3 points and plain LRU by ~0.9 points.
-The gaps are small in absolute terms but far larger than the run-to-run
-noise (stddev ≈ 0.01%), and the ranking was stable across every read/write
-ratio tested — this isn't a workload-shape artifact.
+Two corrections to what this section used to claim, both measured:
+
+**On the single-threaded path PulseMap ties `lru`; it does not beat it.**
+96.76% against 96.77%, with run-to-run stddev of 0.01%, is a tie. The
+~0.9-point lead claimed here previously was a capacity artifact: the
+benchmark handed PulseMap 16,384 slots while `lru`, Moka and QuickCache each
+got 10,000. Giving `lru` the same 16,384 is worth +0.94 points by itself
+(95.83% → 96.77%) — which is the entire margin. Equal budget, equal hit rate.
+
+**On the concurrent and sharded paths, reads never reach the eviction policy,
+and it costs 1.16 points.** `ConcurrentPulseMap::get` pushes an access event
+into an `AccessBuffer` instead of updating the `MetaWord` inline — the v0.6.2
+trade that bought a 66% GET p99 improvement — and nothing in the crate drains
+that buffer, so eviction priority is driven by inserts alone. Two independent
+controls land on the same figure: `ConcurrentPulseMap` and a `TypedPulseMap`
+read through `peek` (which deliberately skips the priority update) both score
+95.60% ± 0.04%. Sharding itself is free (−0.02 points, inside the noise).
+
+At equal capacity that leaves `lru` 1.20 points ahead of `ShardedPulseMap` on
+hit rate. If eviction quality is what you want from a concurrent PulseMap,
+that is a defect rather than a tuning preference, and it is not fixed in this
+release.
+
+Moka and QuickCache are absent from the table because this run did not
+re-measure them. Their earlier figures (96.49% and 96.40–96.45%) were taken
+under the same capacity mismatch and should be read as unverified.
 
 ---
 
@@ -343,7 +366,7 @@ trending API route).
 | A — Realistic mixed workload (hot-key 80/20) | QuickCache | QuickCache is still faster at 423ns p99 (PulseMap GET p99 is now 964ns); both hit similar ~91-92% cache hit rates |
 | B — Large-scale sustained inserts | QuickCache | QuickCache at 7.69M ops/s nearly matched by PulseMap at 7.47M ops/s; Moka is ~20x slower here |
 | C — Extreme hot-key contention (64 keys, 8 threads) | **PulseMap** | PulseMap is ~1.9x faster (1.134µs p99 vs QuickCache's 2.158µs), and far more *consistent* — QuickCache's stddev was 20x higher, meaning its tail latency got unpredictable under contention while PulseMap's didn't |
-| D — Eviction quality (hit rate under memory pressure) | **PulseMap** | Highest hit rate of all 4 caches (96.73%), consistent across every read/write ratio tested — see [Eviction Quality](#eviction-quality-hit-rate-not-speed) |
+| D — Eviction quality (hit rate under memory pressure) | tie with `lru` | At equal capacity `TypedPulseMap` 96.76% vs `lru` 96.77%; the concurrent and sharded paths drop to 95.60% because buffered read accesses never reach the eviction policy. The former "highest of all four" claim was a capacity artifact — see [Eviction Quality](#eviction-quality-hit-rate-not-speed) |
 | Memory footprint at scale | **PulseMap** | 29% less per-entry memory than QuickCache, with flat (non-growing) allocation |
 
 **Practical read:** for general-purpose low-contention caching, QuickCache
@@ -353,10 +376,9 @@ of keys — and in memory-constrained environments where a flat, predictable
 allocation matters more than a small latency edge. Rate limiters on popular
 IPs, hot session keys, and trending-content caches are the workloads where
 PulseMap pulls ahead; generic low-contention application caching is closer
-to a coin flip between PulseMap and QuickCache. On top of the latency picture, PulseMap's eviction policy also kept the
-right keys hot more often than every alternative tested — so even in the
-low-contention case where QuickCache is a bit faster, PulseMap's cache
-hit rate was still the highest of the four.
+to a coin flip between PulseMap and QuickCache. Eviction quality is *not* a
+reason to pick it: measured at equal capacity, the single-threaded path ties
+`lru` and the concurrent path is 1.2 points behind it.
 
 ---
 

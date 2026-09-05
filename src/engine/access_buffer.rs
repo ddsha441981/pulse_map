@@ -5,13 +5,20 @@
 //!
 //! When a `get()` finds a cache hit, instead of mutating the MetaWord's priority
 //! inline (which requires exclusive bucket access), it pushes an access event into
-//! this buffer. The buffer is drained during `insert()` operations, piggybacking
-//! eviction tracking on write operations without needing a background thread.
+//! this buffer. The intent was to drain it during `insert()`, piggybacking eviction
+//! tracking on write operations without needing a background thread.
 //!
-//! The buffer is **lossy**: if it's full, new events are silently dropped.
-//! This is acceptable because LRU/LFU accuracy degrades gracefully — a missed
-//! access event only slightly delays priority promotion, and under high load
-//! (when the buffer fills), eviction accuracy matters less than read latency.
+//! **`drain()` has no caller in the crate today.** `ConcurrentPulseMap::get()` pushes
+//! here, nothing reads it back, so buffered accesses never reach the eviction policy
+//! at all — priority ends up driven by inserts alone. Measured cost on a Zipf 1.3 /
+//! 100k-key workload: 1.16 points of hit rate against the raw path, which updates the
+//! MetaWord inline (`examples/eviction_quality_audit.rs`). Either wire the drain into
+//! `insert_internal` or delete this module and its loom tests; leaving it push-only is
+//! the one option that only ever costs.
+//!
+//! The buffer is **lossy** by design: if it's full, new events are silently dropped.
+//! With no drain it fills once (4096 events) and every push after that returns
+//! `false`.
 
 #[cfg(not(loom))]
 use core::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
