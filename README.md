@@ -441,17 +441,20 @@ cache in the comparison above that builds without `std`:
 
 | | Flash over baseline | RAM | Allocations |
 |---|:-:|:-:|:-:|
-| **PulseMap** | 7,376 B | **2,048 B** — 32 B/entry | **2** |
-| `lru` | 7,208 B | 4,520 B — 70.6 B/entry | 68 |
+| **PulseMap** | 7,320 B | **2,048 B** — 32 B/entry | **2** |
+| `lru` | 7,176 B | 4,520 B — 70.6 B/entry | 68 |
 
 Same 64 entries in **55% less RAM**, touching the allocator twice instead of 68
-times. Flash is a wash here — 168 bytes apart, 2.3%. On Cortex-M3 it is not:
-PulseMap costs 9,864 B to `lru`'s 7,744 B, because portable-atomic's spinlock
+times. Flash is a wash here — 144 bytes apart, 2.0%. On Cortex-M3 it is not:
+PulseMap costs 9,792 B to `lru`'s 7,576 B, because portable-atomic's spinlock
 `AtomicU64` fallback is fatter than the critical-section route M0 takes. If flash
 is your binding constraint on an M3-class part, `lru` is smaller.
 
 Reproduce with `cd qemu-test && ./size.sh`. The baseline subtracted out is a third
-binary with no cache at all, so the table is not measuring `hprintln!`.
+binary with no cache at all, so the table is not measuring `hprintln!`. Flash figures
+are the ones CI prints, on stable rustc 1.98.1 — exact byte counts shift by a few
+dozen bytes between toolchain releases, the ratios do not. RAM and allocation counts
+are properties of the code and do not move at all.
 
 **Memory.** Measured as RSS delta in a fresh child process per cache, capacity
 65,536 entries, filled to capacity, divided by entries actually resident:
