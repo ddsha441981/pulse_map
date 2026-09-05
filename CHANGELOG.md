@@ -45,6 +45,14 @@ A validation release, not a feature release: it exists to prove the correctness 
 - Known limit, documented in the test file: the buffer model does not cover the store order inside `push`. Releasing the new head before writing the payload is a real bug that loses the event, and both tests still pass on it — loom explored 6 executions at every preemption bound tried (1, 2, 3, 5 and the default unbounded) and never scheduled the drain between the two stores. Removing the payload store outright does fail both tests, so the assertions themselves are live
 - `--cfg loom` swaps the atomics in `meta.rs` and `access_buffer.rs` for loom's instrumented ones, and `MetaWord::empty()` loses `const` in that configuration only. **Normal builds are untouched**: loom is a `[target.'cfg(loom)'.dependencies]` entry, so it is resolved into `Cargo.lock` but never compiled — a plain `cargo build -v` passes no `--extern loom`. Both test files are `#![cfg(loom)]`, keeping the 58 unit tests away from loom atomics they would panic on
 
+**Embedded target matrix in CI — PR #20**
+- The `no_std` job was a single `cargo check` against `thumbv7m-none-eabi`. It is now 8 jobs, one per atomic capability class, which is the only axis that can break a bare-metal build here: `MetaWord` is an `AtomicU64`, and `portable-atomic` can only hand one out where the target gives it some form of atomic CAS to build on
+- **Two targets did not compile before this change.** `thumbv6m-none-eabi` (Cortex-M0 / M0+ — both of the RP2040's cores) and `riscv32imc-unknown-none-elf` (ESP32-C3) both fail identically with `error[E0432]: unresolved import portable_atomic::AtomicU64`. ARMv6-M has no `LDREX`/`STREX` and RISC-V without the A extension has no atomic instructions at all, so portable-atomic's `fallback` spinlock has no CAS to build *itself* out of and does not define `AtomicU64` — the crate's `no_std` claim was real but narrower than advertised
+- New opt-in **`critical-section`** feature forwarding to `portable-atomic/critical-section`, which performs the CAS with interrupts masked. With it, both targets check clean. Off by default deliberately: it is only sound on single-core targets, and the impl belongs to the binary rather than the library — a Cortex-M0 user pulls it from `cortex-m`'s `critical-section-single-core`, an ESP32-C3 user from `esp-hal`
+- Newly covered and clean with no extra feature: `thumbv7em-none-eabihf` (Cortex-M4F / M7F), `thumbv8m.main-none-eabi` (Cortex-M33), `riscv32imac-unknown-none-elf`, `aarch64-unknown-none`, `wasm32-unknown-unknown`
+- `fail-fast: false`, so one unsupported target can't mask the state of the other seven
+- Scope, stated plainly: these are compile checks. Nothing was executed on real silicon or under QEMU, and `cargo check` does not link — a downstream binary on thumbv6m or riscv32imc still has to supply the `critical-section` impl or it fails at link time
+
 ---
 
 ## [v0.6.4] — 2026-08-19

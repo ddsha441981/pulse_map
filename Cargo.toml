@@ -35,6 +35,13 @@ default = ["std"]
 std = []
 simd = []
 
+# Cortex-M0/M0+ (thumbv6m) and RISC-V without the A extension (riscv32imc) have no
+# atomic CAS instruction, so portable-atomic's spinlock fallback cannot build and
+# `AtomicU64` is simply absent there. This routes the CAS through a critical section
+# instead. The final binary supplies the impl — e.g. `cortex-m` with its
+# `critical-section-single-core` feature, or `esp-hal` on the ESP32-C3.
+critical-section = ["portable-atomic/critical-section"]
+
 # `cfg(loom)` is set through RUSTFLAGS, so rustc's --check-cfg (1.80+) would otherwise
 # warn on every `#[cfg(loom)]` and fail CI's `clippy -D warnings`.
 # Ignored with an "unused manifest key" warning on cargo < 1.74, which is fine:

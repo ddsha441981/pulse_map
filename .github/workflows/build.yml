@@ -119,16 +119,34 @@ jobs:
   # ═══════════════════════════════════════════════════════════
   # Embedded no_std Check
   # ═══════════════════════════════════════════════════════════
+  # One job per atomic capability class — that is the only axis that can break a
+  # bare-metal build here. MetaWord is an AtomicU64, and portable-atomic can only
+  # hand one out where the target gives it some form of atomic CAS to build on.
   no_std:
-    name: no_std Check
+    name: no_std (${{ matrix.target }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # 32-bit CAS present: portable-atomic's spinlock fallback provides AtomicU64.
+          - { target: thumbv7m-none-eabi, extra: "" }            # Cortex-M3
+          - { target: thumbv7em-none-eabihf, extra: "" }         # Cortex-M4F / M7F
+          - { target: thumbv8m.main-none-eabi, extra: "" }       # Cortex-M33
+          - { target: riscv32imac-unknown-none-elf, extra: "" }  # RISC-V with the A extension
+          - { target: wasm32-unknown-unknown, extra: "" }
+          # Native 64-bit atomics, no fallback involved.
+          - { target: aarch64-unknown-none, extra: "" }          # 64-bit bare metal
+          # No atomic CAS at any width: AtomicU64 has to go through a critical section.
+          - { target: thumbv6m-none-eabi, extra: "--features critical-section" }           # Cortex-M0 / M0+ (RP2040)
+          - { target: riscv32imc-unknown-none-elf, extra: "--features critical-section" }  # ESP32-C3
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - name: Install embedded target
-        run: rustup target add thumbv7m-none-eabi
+        with:
+          targets: ${{ matrix.target }}
       - name: Check no_std compilation
-        run: cargo check -p pulse_map --target thumbv7m-none-eabi --no-default-features
+        run: cargo check -p pulse_map --target ${{ matrix.target }} --no-default-features ${{ matrix.extra }}
 
   # ═══════════════════════════════════════════════════════════
   # MSRV (Minimum Supported Rust Version)
