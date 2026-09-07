@@ -42,7 +42,6 @@ impl AccessEvent {
         ((bucket_idx as u32) << 8) | (slot_idx as u32)
     }
 
-    #[allow(dead_code)]
     #[inline]
     fn unpack(val: u32) -> (usize, u8) {
         let bucket_idx = (val >> 8) as usize;
@@ -94,14 +93,34 @@ impl AccessBuffer {
     }
 
     /// Drain up to `max_events` from the buffer. Calls `f(bucket_idx, slot_idx)` for each.
-    /// This can be called from `insert()` or a background maintenance path.
-    #[allow(dead_code)]
+    /// Called from `insert()` in bounded batches, before its eviction decision.
+    ///
+    /// Multi-consumer safe: the range `[tail, tail + to_drain)` is claimed by a CAS
+    /// on `tail` before any slot is read, so concurrent drains never double-deliver.
+    /// A failed claim just returns — another drain owns the range, and skipped
+    /// events stay queued for the next drain, within the lossy contract.
     #[inline]
     pub fn drain(&self, max_events: usize, mut f: impl FnMut(usize, u8)) {
         let tail = self.tail.load(Ordering::Relaxed);
         let head = self.head.load(Ordering::Acquire);
-        let available = head.wrapping_sub(tail);
-        let to_drain = available.min(max_events);
+        let to_drain = head.wrapping_sub(tail).min(max_events);
+        if to_drain == 0 {
+            return;
+        }
+
+        // Strong CAS, no retry: a failure means another consumer claimed first.
+        if self
+            .tail
+            .compare_exchange(
+                tail,
+                tail.wrapping_add(to_drain),
+                Ordering::Acquire,
+                Ordering::Relaxed,
+            )
+            .is_err()
+        {
+            return;
+        }
 
         for i in 0..to_drain {
             let idx = (tail.wrapping_add(i)) & self.mask;
@@ -114,9 +133,6 @@ impl AccessBuffer {
                     .store(AccessEvent::EMPTY, Ordering::Relaxed);
             }
         }
-
-        self.tail
-            .store(tail.wrapping_add(to_drain), Ordering::Release);
     }
 }
 

@@ -280,6 +280,10 @@ impl<K: PulseKey, V: PulseValue> ConcurrentPulseMap<K, V> {
         self.insert_internal(key, value, ttl);
     }
 
+    /// Events drained per insert. Bounded so insert latency stays low; the
+    /// buffer is lossy, so leftovers queue for the next insert.
+    const DRAIN_BATCH: usize = 64;
+
     /// Internal insert with TTL parameter.
     fn insert_internal(&self, key: K, value: V, ttl: u64) {
         if self.auto_resize {
@@ -297,10 +301,6 @@ impl<K: PulseKey, V: PulseValue> ConcurrentPulseMap<K, V> {
         // Advance epoch on every insert
         self.current_epoch.fetch_add(1, Ordering::Relaxed);
 
-        // Note: Access buffer events (from get()) are NOT drained here.
-        // The buffer is lossy — when full, new events are silently dropped.
-        // This keeps insert latency low while providing approximate LRU/LFU tracking.
-
         let kb = key.to_bytes();
         let vb = value.to_bytes();
         let key_bytes = kb.as_ref();
@@ -309,6 +309,18 @@ impl<K: PulseKey, V: PulseValue> ConcurrentPulseMap<K, V> {
 
         let state = self.inner.read().unwrap();
         let idx = (hr.h1 as usize) & state.bucket_mask;
+
+        // Apply deferred get() events before this insert's eviction decision, so
+        // reads carry weight. Bounded batch: insert latency stays low, and the
+        // buffer is lossy anyway — leftover events queue for the next insert.
+        // Runs before this thread's BucketGuard: on_access is a CAS loop, safe
+        // from a shared ref (same argument as get()), so no target-bucket lock.
+        // Taking one could deadlock on lock ordering if we ever nest guards.
+        self.access_buffer
+            .drain(Self::DRAIN_BATCH, |bucket_idx, slot_idx| {
+                let target = unsafe { &*state.buckets[bucket_idx].get() };
+                target.meta.on_access(slot_idx);
+            });
 
         let _guard = BucketGuard::new(&state.locks, idx);
 

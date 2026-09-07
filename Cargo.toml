@@ -96,6 +96,14 @@ required-features = ["std"]
 name = "soak_test"
 required-features = ["std"]
 
+[[example]]
+name = "drain_latency"
+required-features = ["std"]
+
+[[example]]
+name = "hitrate_16384"
+required-features = ["std"]
+
 [profile.release]
 opt-level = 3
 lto = true
