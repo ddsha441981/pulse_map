@@ -88,9 +88,20 @@ fn main() {
     let (tm, ts) = mean_std(&typed);
     let (sm, ss) = mean_std(&sync);
     let (cm, cs) = mean_std(&ctrl);
-    println!("capacity=16384 key_space={} zipf={} ops={} trials={} read_ratio=0.99",
-        KEY_SPACE, ZIPF_EXP, TOTAL_OPS, TRIALS);
-    println!("{:<44} {:>8.3}% ± {:.3}%", "TypedPulseMap get (inline on_access)", tm, ts);
-    println!("{:<44} {:>8.3}% ± {:.3}%", "ConcurrentPulseMap get (drained)", sm, ss);
-    println!("{:<44} {:>8.3}% ± {:.3}%", "ConcurrentPulseMap peek (no read weight)", cm, cs);
+    println!(
+        "capacity=16384 key_space={} zipf={} ops={} trials={} read_ratio=0.99",
+        KEY_SPACE, ZIPF_EXP, TOTAL_OPS, TRIALS
+    );
+    println!(
+        "{:<44} {:>8.3}% ± {:.3}%",
+        "TypedPulseMap get (inline on_access)", tm, ts
+    );
+    println!(
+        "{:<44} {:>8.3}% ± {:.3}%",
+        "ConcurrentPulseMap get (drained)", sm, ss
+    );
+    println!(
+        "{:<44} {:>8.3}% ± {:.3}%",
+        "ConcurrentPulseMap peek (no read weight)", cm, cs
+    );
 }
