@@ -326,6 +326,27 @@ The gaps are small in absolute terms but far larger than the run-to-run
 noise (stddev ≈ 0.01%), and the ranking was stable across every read/write
 ratio tested — this isn't a workload-shape artifact.
 
+### Concurrent hit rate (TypedPulseMap vs ConcurrentPulseMap)
+
+A separate harness (`examples/hitrate_16384.rs`) measures the *concurrent*
+map against the single-threaded one at equal 16,384-entry capacity — key
+space 10x, Zipf 1.3, 99% reads, 4 threads. The numbers are not comparable
+to the single-threaded table above (different workload shape and
+concurrency); the point of this benchmark is the *gap between the two maps*:
+
+| Map | Hit Rate (mean ± stddev) |
+|---|:-:|
+| TypedPulseMap (control) | 95.372% ± 0.011% |
+| ConcurrentPulseMap | 95.372% ± 0.011% |
+| ConcurrentPulseMap via `peek()` (reads unweighted, control) | 94.456% ± 0.012% |
+
+Before the AccessBuffer drain was wired into `insert()` (v0.6.5), reads in
+the concurrent map never reached the eviction policy — it evicted as if
+every key were cold and sat 1.16 points below TypedPulseMap. Since the
+drain, both maps tie: `get()` reads carry the +0.92 points of weight that
+`peek()` deliberately leaves out. The drain runs on the write path only —
+read latency is untouched (`examples/drain_latency.rs`).
+
 ---
 
 ## Where PulseMap Fits
