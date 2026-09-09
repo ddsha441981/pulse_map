@@ -182,6 +182,16 @@ jobs:
       - name: Run on emulated hardware
         working-directory: qemu-test
         run: cargo run --release --target ${{ matrix.target }} ${{ matrix.extra }}
+      # RAM and flash cost against `lru` — the only other cache in the README's
+      # comparison that builds without std. Printed, not gated: it is evidence for
+      # the docs, and a size gate would need a stored baseline to diff against.
+      - name: Footprint vs lru
+        working-directory: qemu-test
+        run: |
+          for b in footprint_none footprint_pulse footprint_lru; do
+            cargo run -q --release --target ${{ matrix.target }} ${{ matrix.extra }} --bin "$b"
+          done
+          ./size.sh ${{ matrix.target }}
 
   # ═══════════════════════════════════════════════════════════
   # MSRV (Minimum Supported Rust Version)

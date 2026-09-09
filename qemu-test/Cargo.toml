@@ -8,6 +8,9 @@ name = "pulse_map-qemu-test"
 version = "0.0.0"
 edition = "2021"
 publish = false
+# Three extra bins live here for the footprint comparison, so `cargo run` needs
+# to know which one is the test.
+default-run = "pulse_map-qemu-test"
 
 [dependencies]
 pulse_map = { path = "..", default-features = false }
@@ -16,6 +19,10 @@ cortex-m-rt = "0.7"
 cortex-m-semihosting = "0.5"
 # `exit` matters in CI: a panic must end the QEMU process, not spin forever.
 panic-semihosting = { version = "0.6", features = ["exit"] }
+# Only for the footprint comparison. Default features pull hashbrown, which is
+# what makes lru no_std — the reason it is the one cache worth comparing against
+# on bare metal.
+lru = "0.12"
 
 [features]
 # Cortex-M0/M0+ has no atomic CAS, so pulse_map's AtomicU64 goes through a
@@ -25,3 +32,8 @@ m0 = ["pulse_map/critical-section", "cortex-m/critical-section-single-core"]
 [profile.release]
 # Costs nothing at runtime and makes a QEMU backtrace readable.
 debug = true
+# Matches the parent crate's release profile, and matches what any real firmware
+# ships. Without it the footprint numbers measure un-inlined cross-crate glue that
+# nobody actually flashes.
+lto = true
+codegen-units = 1
