@@ -313,11 +313,16 @@ impl<K: PulseKey, V: PulseValue> ConcurrentPulseMap<K, V> {
         // Apply deferred get() events before this insert's eviction decision, so
         // reads carry weight. Bounded batch: insert latency stays low, and the
         // buffer is lossy anyway — leftover events queue for the next insert.
-        // Runs before this thread's BucketGuard: on_access is a CAS loop, safe
-        // from a shared ref (same argument as get()), so no target-bucket lock.
-        // Taking one could deadlock on lock ordering if we ever nest guards.
+        // Each callback takes the target bucket's lock: on_access CASes the
+        // target's MetaWord, and every &mut retag of that bucket (insert/get/
+        // remove) happens under the same lock, so the CAS must too or it races
+        // the retag (Miri: data race on the Bucket allocation). Guards are
+        // never nested — the drain runs before this insert's own BucketGuard,
+        // and the callback releases each target lock before the next event.
+        // No lock-order cycle: AccessBuffer itself is lock-free.
         self.access_buffer
             .drain(Self::DRAIN_BATCH, |bucket_idx, slot_idx| {
+                let _target_guard = BucketGuard::new(&state.locks, bucket_idx);
                 let target = unsafe { &*state.buckets[bucket_idx].get() };
                 target.meta.on_access(slot_idx);
             });
