@@ -17,7 +17,7 @@
 #![no_std]
 #![no_main]
 
-use core::alloc::{GlobalAlloc, Layout};
+mod bump;
 
 use cortex_m_rt::entry;
 use cortex_m_semihosting::{debug, hprintln};
@@ -27,35 +27,6 @@ use pulse_map::TypedPulseMap;
 // critical-section impl that portable-atomic calls into.
 use cortex_m as _;
 use panic_semihosting as _;
-
-const HEAP_SIZE: usize = 8 * 1024;
-static mut HEAP: [u8; HEAP_SIZE] = [0; HEAP_SIZE];
-// Plain `usize`, not an atomic: this is single-threaded with interrupts never
-// enabled, and Cortex-M0 has no atomic CAS to use here anyway.
-static mut NEXT: usize = 0;
-
-/// ponytail: bump allocator, `dealloc` is a no-op. Correct for a run-once test
-/// that allocates its buckets at startup and exits; real firmware wants
-/// `embedded-alloc`.
-struct Bump;
-
-unsafe impl GlobalAlloc for Bump {
-    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        let base = core::ptr::addr_of_mut!(HEAP) as usize;
-        let aligned = (base + NEXT + layout.align() - 1) & !(layout.align() - 1);
-        let end = aligned + layout.size();
-        if end > base + HEAP_SIZE {
-            return core::ptr::null_mut();
-        }
-        NEXT = end - base;
-        aligned as *mut u8
-    }
-
-    unsafe fn dealloc(&self, _ptr: *mut u8, _layout: Layout) {}
-}
-
-#[global_allocator]
-static ALLOC: Bump = Bump;
 
 // PulseMapRaw::new allocates two Vecs, not one: `buckets` at 64 B each, plus
 // `slots_ttl` at 4 x sizeof(SlotTTL) = 4 x 16 B per bucket. That is **128 bytes
@@ -121,11 +92,55 @@ fn main() -> ! {
     check(&mut failed, "remove reports hit", rm.remove(&3));
     check(&mut failed, "removed key is gone", rm.get(&3).is_none());
 
+    // ── Allocator discipline ───────────────────────────────────────────────
+    // "needs an allocator" and "needs an allocator at construction" are very
+    // different claims to a firmware author. Count the allocations rather than
+    // asserting either one.
+    let before = bump::allocs();
+    let mut inline: TypedPulseMap<u32, u32> = TypedPulseMap::new(8);
+    let after_new = bump::allocs();
+    for k in 0..256u32 {
+        inline.insert(k, k);
+        inline.get(&k);
+        inline.remove(&(k / 2));
+    }
+    check(&mut failed, "construction allocates", after_new > before);
+    check(
+        &mut failed,
+        "inline mode: zero allocations after construction",
+        bump::allocs() == after_new,
+    );
+    hprintln!(
+        "alloc: inline u32->u32 = {} at new(), {} across 256 insert+get+remove",
+        after_new - before,
+        bump::allocs() - after_new
+    );
+
+    // The honest counterexample: u64 exceeds the 6-byte key / 7-byte value inline
+    // window, so every entry goes to the slab and heap-allocates. A static arena
+    // is only sufficient for the inline case.
+    let before = bump::allocs();
+    let mut slab: TypedPulseMap<u64, u64> = TypedPulseMap::new(2);
+    let after_new = bump::allocs();
+    for k in 0..6u64 {
+        slab.insert(k, k.wrapping_mul(10));
+    }
+    check(
+        &mut failed,
+        "slab mode allocates per insert",
+        bump::allocs() > after_new,
+    );
+    hprintln!(
+        "alloc: slab u64->u64   = {} at new(), {} across 6 inserts",
+        after_new - before,
+        bump::allocs() - after_new
+    );
+
     hprintln!(
         "qemu-test: {} buckets, {} nominal slots, {} heap bytes used",
         BUCKETS,
         CAPACITY,
-        heap_used()
+        bump::bytes()
     );
 
     if failed == 0 {
@@ -138,12 +153,6 @@ fn main() -> ! {
 
     // debug::exit does not return `!`; QEMU is already gone by here.
     loop {}
-}
-
-/// Bytes handed out by the bump allocator so far — printed so the CI log
-/// records what PulseMap actually costs on a 16 KiB part.
-fn heap_used() -> usize {
-    unsafe { NEXT }
 }
 
 fn check(failed: &mut u32, what: &str, ok: bool) {

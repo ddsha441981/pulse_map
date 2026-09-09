@@ -10,7 +10,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### 🔬 Validation & Hardening
 
-A validation release at heart, but with one `src/` logic change: the AccessBuffer drain (PR #24) below. Everything else in `src/` is test attributes and cfg-gated atomic imports.
+A validation release, not a feature release: it exists to prove the correctness of the `unsafe` and lock-free code that is already shipping. `src/` carries no logic changes — only test attributes and cfg-gated atomic imports.
 
 **cargo-fuzz harness (`fuzz/`) — issue #7, PR #13 (@saiteja00743)**
 - New `fuzz_sequences` target driving random `insert` / `get` / `remove` sequences with TTL and eviction pressure, re-reading the last insert to catch silent corruption
@@ -63,11 +63,24 @@ A validation release at heart, but with one `src/` logic change: the AccessBuffe
 - Still not covered, deliberately: `riscv32imc` (ESP32-C3). `qemu-system-riscv32 -machine virt` has the A extension, so emulating it would test a target that does not need the feature. And nothing has run on physical silicon
 - `qemu-test/` is its own workspace with its own `.cargo/config.toml` runner, the same isolation `fuzz/` uses, so it never affects a host build of `pulse_map`
 
-**AccessBuffer drain — PR #24**
+**AccessBuffer drain**
 - `ConcurrentPulseMap::get()` buffers its LRU/LFU priority updates in the `AccessBuffer` (introduced v0.6.2), but nothing ever drained the buffer — so reads never fed the eviction policy. Its hit rate sat 0.92 points under `TypedPulseMap`'s: **94.456% vs 95.372%** in the `hitrate_16384` benchmark
 - `insert()` now drains the buffer under the target bucket's lock, so read latency is untouched: the drain runs on the write path only
 - Ships with a `BucketGuard` fix so the drain is Miri-clean
 - Result: `ConcurrentPulseMap::get()` ties `TypedPulseMap` at **95.372%**
+
+**Embedded footprint evidence**
+- Answers the two objections an embedded reviewer would actually raise, with measurements instead of prose. Both run in the existing QEMU CI job; no new infrastructure
+- **`alloc` is needed only at construction, and that is now machine-checked.** The QEMU test's bump allocator counts its calls: `TypedPulseMap<u32, u32>` makes **2 allocations at `new()` and 0 across 256 `insert`+`get`+`remove`**. The two are `buckets` and `slots_ttl`, so a fixed `buckets × 128`-byte arena is sufficient for the map's whole lifetime. This is the difference between "needs a heap" (a dealbreaker in firmware that deliberately has none) and "needs a static arena at init" (a line in `main`)
+- The counterexample is reported too, not hidden: `TypedPulseMap<u64, u64>` exceeds the 6-byte key / 7-byte value inline window, so entries reach the slab and allocate — 14 allocations across 6 inserts. A static arena is not enough for that path
+- **Flash and RAM measured against `lru`** on the emulated Cortex-M0, same workload, same `lto = true` profile, both holding 64 resident entries: PulseMap 2,048 B of RAM / 2 allocations, `lru` 4,520 B / 68. **55% less RAM at the same entry count** (32 vs 70.6 B/entry). Flash is a wash — 7,320 B vs 7,176 B over baseline, 2.0% apart
+- **Reported against interest:** on Cortex-M3 PulseMap costs 9,792 B of flash to `lru`'s 7,576 B. portable-atomic's spinlock `AtomicU64` fallback is fatter than the critical-section route M0 takes, so where flash is the binding constraint on an M3-class part, `lru` is the smaller choice. `README.md` says so
+- Flash figures are quoted from CI (stable rustc 1.98.1) rather than a local build: exact byte counts drift a few dozen bytes per toolchain release, so the reproducible number is the one anyone can read off the workflow. RAM and allocation counts are toolchain-independent
+- Three probe binaries under `qemu-test/src/bin/` (`footprint_none`, `footprint_pulse`, `footprint_lru`) plus `qemu-test/size.sh`. The no-cache baseline exists so the table measures the caches rather than `hprintln!` and the panic handler — it is 2,496 B of the total on thumbv6m. Host binutils `size` reads ARM ELF, so no `arm-none-eabi` toolchain is required
+- `qemu-test` release profile gained `lto = true` / `codegen-units = 1`, matching the parent crate and what real firmware ships. Without LTO the comparison measured un-inlined cross-crate glue nobody flashes, and it moved the numbers by thousands of bytes
+- Bump allocator extracted to `qemu-test/src/bump.rs` and shared by all four binaries
+- README's **Known Limitations** list now carries these as first-class entries rather than leaving them in prose: no MCU perf figure exists, `lru` wins on flash on M3-class parts, and every `get` hit CASes the `MetaWord` even single-threaded — which on M0 means reads disable interrupts
+- **Still not measured, and now stated in the README:** no throughput or latency figure on any MCU. QEMU is not cycle-accurate — no pipeline model, no flash wait states — so timing it would produce a number worth less than no number. Every performance figure in the docs is x86_64. Closing that needs real silicon; an RP2040 is the honest choice, being the Cortex-M0+ part that needs `critical-section`
 
 ---
 
