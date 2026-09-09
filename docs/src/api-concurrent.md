@@ -99,6 +99,19 @@ Resize:
 
 **Key insight:** Normal reads and writes only acquire a **read lock** on the RwLock, so they run concurrently. The per-bucket spinlock serializes access to the same bucket only. Reads use an `AtomicU64` MetaWord and `AccessBuffer` for deferred LRU/LFU updates, completely avoiding locks on read paths.
 
+### When deferred reads are applied
+
+`get()` only pushes an event; the weight is applied by `insert()`, which
+drains up to 64 queued events (batch size `DRAIN_BATCH`) before its own
+eviction decision — so reads influence which entry gets evicted, with zero
+locks on the read path. The drain runs before the insert takes its bucket
+spinlock, so it never locks a bucket while holding another. The buffer is
+lossy under sustained pressure: if two drains race, the loser skips its
+range and those events stay queued for a later insert.
+
+- `get()` → read counts toward eviction priority (via the deferred drain)
+- `peek()` → pure read, no priority update — use it when you don't want reads to keep an entry hot
+
 ## Production Pattern
 
 ```rust
