@@ -8,6 +8,7 @@ PulseMap uses Cargo feature flags to control optional functionality.
 |---------|:-------:|-------------|
 | `std` | ✅ | Standard library (ConcurrentPulseMap, ShardedPulseMap, threading) |
 | `simd` | ❌ | SIMD H2 matching acceleration (x86_64 SSE2) |
+| `critical-section` | ❌ | Atomic CAS via interrupt masking (Cortex-M0, ESP32-C3) |
 
 ## Feature Details
 
@@ -20,11 +21,11 @@ Enables:
 - `Display` and `Debug` formatting
 
 ```toml
-# With std (default) — v0.6.1
-pulse_map = "0.6.1"
+# With std (default)
+pulse_map = "0.6"
 
 # Without std (no_std mode)
-pulse_map = { version = "0.6.1", default-features = false }
+pulse_map = { version = "0.6", default-features = false }
 ```
 
 ### `no_std` Mode
@@ -39,13 +40,30 @@ When `std` is disabled, only the core data structures are available:
 **Use case:** Embedded systems, OS kernels, WebAssembly.
 
 Works on targets without native 64-bit atomics (WASM32, ARMv7-M, 32-bit) via `portable-atomic` fallback.
+For targets without any atomic CAS (Cortex-M0, ESP32-C3), enable the `critical-section` feature.
+
+See [Embedded & `no_std`](./embedded-no-std.md) for the full target matrix, QEMU
+testing, and memory footprint on microcontrollers.
+
+### `critical-section`
+
+Required for targets without hardware atomic CAS (Cortex-M0, RISC-V without
+the A extension). Routes `AtomicU64` operations through interrupt masking.
+
+```toml
+pulse_map = { version = "0.6", default-features = false, features = ["critical-section"] }
+```
+
+The critical-section **implementation** must come from your HAL (e.g.
+`cortex-m` with `critical-section-single-core`, or `esp-hal`). See
+[Embedded & `no_std`](./embedded-no-std.md) for details.
 
 ### `simd`
 
 Enables SIMD-accelerated H2 fingerprint matching on x86_64:
 
 ```toml
-pulse_map = { version = "0.6.1", features = ["simd"] }
+pulse_map = { version = "0.6", features = ["simd"] }
 ```
 
 Uses SSE2 `_mm_cmpeq_epi8` to compare all 4 H2 fingerprints simultaneously:

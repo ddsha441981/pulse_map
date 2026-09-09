@@ -67,10 +67,10 @@ moka's strength is its W-TinyLFU eviction policy (better hit rates on skewed wor
 ### How much memory does PulseMap use?
 
 ```
-Memory = num_buckets × 64 bytes + slab_overhead
+Memory ≈ capacity × 34.2 bytes + slab_overhead
 ```
 
-For inline-only workloads (small KV pairs): exactly `num_buckets × 64` bytes.
+For inline-only workloads (small KV pairs): ~34.2 bytes per entry at scale.
 
 ### Can I use PulseMap in no_std?
 

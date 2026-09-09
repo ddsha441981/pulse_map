@@ -63,8 +63,13 @@ A validation release, not a feature release: it exists to prove the correctness 
 - Still not covered, deliberately: `riscv32imc` (ESP32-C3). `qemu-system-riscv32 -machine virt` has the A extension, so emulating it would test a target that does not need the feature. And nothing has run on physical silicon
 - `qemu-test/` is its own workspace with its own `.cargo/config.toml` runner, the same isolation `fuzz/` uses, so it never affects a host build of `pulse_map`
 
+**AccessBuffer drain**
+- `ConcurrentPulseMap::get()` buffers its LRU/LFU priority updates in the `AccessBuffer` (introduced v0.6.2), but nothing ever drained the buffer — so reads never fed the eviction policy. Its hit rate sat 0.92 points under `TypedPulseMap`'s: **94.456% vs 95.372%** in the `hitrate_16384` benchmark
+- `insert()` now drains the buffer under the target bucket's lock, so read latency is untouched: the drain runs on the write path only
+- Ships with a `BucketGuard` fix so the drain is Miri-clean
+- Result: `ConcurrentPulseMap::get()` ties `TypedPulseMap` at **95.372%**
 
-**Embedded footprint evidence — PR #22**
+**Embedded footprint evidence**
 - Answers the two objections an embedded reviewer would actually raise, with measurements instead of prose. Both run in the existing QEMU CI job; no new infrastructure
 - **`alloc` is needed only at construction, and that is now machine-checked.** The QEMU test's bump allocator counts its calls: `TypedPulseMap<u32, u32>` makes **2 allocations at `new()` and 0 across 256 `insert`+`get`+`remove`**. The two are `buckets` and `slots_ttl`, so a fixed `buckets × 128`-byte arena is sufficient for the map's whole lifetime. This is the difference between "needs a heap" (a dealbreaker in firmware that deliberately has none) and "needs a static arena at init" (a line in `main`)
 - The counterexample is reported too, not hidden: `TypedPulseMap<u64, u64>` exceeds the 6-byte key / 7-byte value inline window, so entries reach the slab and allocate — 14 allocations across 6 inserts. A static arena is not enough for that path

@@ -54,12 +54,12 @@ HashMap has no eviction — it's a different category entirely:
 
 ## Memory Efficiency
 
-| Map Size | PulseMap | HashMap | Savings |
+| Map Size | PulseMap | `lru` | Savings |
 |:--------:|:-------:|:-------:|:-------:|
-| 1K entries | 16 KB | 48 KB | **67%** |
-| 10K entries | 160 KB | 480 KB | **67%** |
-| 100K entries | 1.6 MB | 4.8 MB | **67%** |
-| 1M entries | 16 MB | 48 MB | **67%** |
+| 1K entries | ~34 KB | ~68 KB | **50%** |
+| 10K entries | ~342 KB | ~678 KB | **50%** |
+| 100K entries | ~3.4 MB | ~6.8 MB | **50%** |
+| 1M entries | ~34.2 MB | ~67.7 MB | **50%** |
 
 ## Running Benchmarks
 

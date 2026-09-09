@@ -25,6 +25,7 @@
 - [Architecture & Internals](./architecture.md)
 - [Performance & Benchmarks](./benchmarks.md)
 - [Feature Flags](./features.md)
+- [Embedded & `no_std`](./embedded-no-std.md)
 - [FFI — C Bindings](./ffi-bindings.md)
 
 ---
