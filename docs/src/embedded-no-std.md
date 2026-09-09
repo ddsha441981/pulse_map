@@ -65,11 +65,11 @@ On a Cortex-M with 16 KiB RAM, PulseMap fits comfortably:
 
 | Config | Buckets | Slots | Heap Used |
 |---|---|---|---|
-| 16 buckets | 16 | 64 | **3,072 bytes** |
-| 4 buckets | 4 | 16 | ~768 bytes |
+| 16 buckets | 16 | 64 | **2,048 bytes** |
+| 4 buckets | 4 | 16 | **512 bytes** |
 
 Each bucket is exactly 128 bytes of heap (64B bucket + 64B slot TTL metadata).
-A 64-slot cache in under 3 KB of RAM is what makes PulseMap practical on
+A 64-slot cache in 2 KiB of RAM is what makes PulseMap practical on
 parts where Moka and QuickCache cannot even compile.
 
 ## Running the QEMU Tests Yourself
@@ -93,6 +93,11 @@ instructions, not a compile check. Output:
 qemu-test: 16 buckets, 64 nominal slots, 3072 heap bytes used
 qemu-test: all checks passed
 ```
+
+The 3,072 covers **all three maps the test creates** — the 16-bucket main
+map (2,048 B) plus two 4-bucket maps for the TTL and remove checks
+(512 B each): 24 buckets × 128 B. A lone 16-bucket map is 2 KiB, matching
+the table above.
 
 ## PulseMap vs LRU on Embedded
 

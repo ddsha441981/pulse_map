@@ -361,23 +361,23 @@ trending API route).
 
 | Scenario | Winner | Notes |
 |---|---|---|
-| A — Realistic mixed workload (hot-key 80/20) | QuickCache | QuickCache is still faster at 379ns GET p99 (PulseMap GET p99 is 877ns); both hit similar ~91% cache hit rates |
-| B — Large-scale sustained inserts | **PulseMap** | PulseMap at 6.55M ops/s wins over QuickCache at 5.88M ops/s; Moka is much slower here (0.36M ops/s) |
-| C — Extreme hot-key contention (64 keys, 8 threads) | QuickCache | QuickCache is faster (665ns p99 vs PulseMap's 1.301µs) |
+| A — Realistic mixed workload (hot-key 80/20) | QuickCache | QuickCache is faster at ~425ns GET p99 (PulseMap GET p99 is ~860ns); hit rates are close (91.7% vs 91.2%) |
+| B — Large-scale sustained inserts | QuickCache | QuickCache at 9.2–10.0M ops/s vs PulseMap at 8.7–8.8M ops/s in the two most recent runs; an earlier session had PulseMap ahead (6.55M vs 5.88M), so this one sits inside run-to-run variance; Moka is much slower here (~0.4M ops/s) |
+| C — Extreme hot-key contention (64 keys, 8 threads) | Split | QuickCache finishes first (~55–75ms vs ~82–119ms), but PulseMap's p99 tail is ~2x lower (1.33µs vs 2.79µs) — three runs agree |
 | D — Eviction quality (hit rate under memory pressure) | **PulseMap** | Highest hit rate of all 4 caches (96.73%), consistent across every read/write ratio tested — see [Eviction Quality](#eviction-quality-hit-rate-not-speed) |
 | Memory footprint at scale | **PulseMap** | ~4% less per-entry memory than QuickCache, with flat (non-growing) allocation |
 
-**Practical read:** for general-purpose low-contention caching, QuickCache
-is a strong, slightly faster choice. **PulseMap's specific advantage shows
-up under contention** — many threads repeatedly touching a small, hot set
-of keys — and in memory-constrained environments where a flat, predictable
-allocation matters more than a small latency edge. Rate limiters on popular
-IPs, hot session keys, and trending-content caches are the workloads where
-PulseMap pulls ahead; generic low-contention application caching is closer
-to a coin flip between PulseMap and QuickCache. On top of the latency picture, PulseMap's eviction policy also kept the
-right keys hot more often than every alternative tested — so even in the
-low-contention case where QuickCache is a bit faster, PulseMap's cache
-hit rate was still the highest of the four.
+**Practical read:** on raw throughput, QuickCache wins everywhere — mixed
+workloads, sustained inserts, and total time under contention. **PulseMap's
+advantage is the tail, not the mean**: under extreme hot-key contention its
+p99 is ~2x lower than QuickCache's (1.33µs vs 2.79µs), and in the
+latency-spikes benchmark its p99 is 987ns vs QuickCache's 1.516µs — when a
+viral user or trending route makes every request queue, that tail is the
+user-visible latency. PulseMap also keeps the highest cache hit rate of
+everything tested (96.73%, consistent across read/write ratios) and its
+allocation is flat and bounded. Rate limiters on popular IPs, hot session
+keys, and latency-sensitive caches are where PulseMap fits; for
+throughput-first general-purpose caching, QuickCache is the honest pick.
 
 ---
 
@@ -656,9 +656,9 @@ pulse_map_free(map);
 
 ## Known Limitations
 
-- Lookup is ~2.3x slower than quick_cache on mixed workloads — serialization trade-off for `no_std`/FFI
+- Lookup is ~2x slower than quick_cache on mixed workloads — serialization trade-off for `no_std`/FFI
 - Lock-free reads via AtomicU64 MetaWord (v0.6.2+) — reads no longer acquire bucket spinlocks
-- On low-contention, general-purpose read/write mixed workloads, QuickCache is modestly faster (see [Where PulseMap Fits](#where-pulsemap-fits)) — PulseMap's edge is specifically under contention and in memory footprint, not universal
+- On low-contention, general-purpose read/write mixed workloads, QuickCache is faster (see [Where PulseMap Fits](#where-pulsemap-fits)) — PulseMap's edge is tail latency under contention, eviction quality, and memory footprint, not raw throughput
 - TTL is insertion-count based, not wall-clock time
 - No async API yet
 

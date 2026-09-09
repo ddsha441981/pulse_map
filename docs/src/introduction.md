@@ -60,9 +60,13 @@ println!("Entries: {}, Evictions: {}", map.len(), map.eviction_count());
 - **📏 Bounded Memory** — Fixed capacity, no unbounded growth
 - **🔄 Auto-Resize** — Optional dynamic growth at 75% load
 - **🌐 C FFI Bindings** — Use from C, or build your own language bridge
-- **🔧 no_std Compatible** — Core data structures work without allocator
+- **🔧 no_std Compatible** — Runs without `std`, needs only `alloc` (8 embedded targets CI-verified)
 
 ## Supported Platforms
+
+All 8 embedded targets below are `cargo check`-verified in CI on every push;
+🏃 marks the two that also **execute** their test suite under QEMU. See
+[Embedded & `no_std`](embedded-no-std.md) for the full matrix.
 
 | Platform | Status |
 |----------|:------:|
@@ -70,8 +74,13 @@ println!("Entries: {}, Evictions: {}", map.len(), map.eviction_count());
 | macOS x86_64 / ARM64 | ✅ |
 | Windows x86_64 | ✅ |
 | WASM32 (WebAssembly) | ✅ |
-| ARMv7-M / thumbv7m (embedded) | ✅ |
-| Any 32-bit target | ✅ |
+| `thumbv7m` — Cortex-M3 | ✅ 🏃 QEMU |
+| `thumbv7em` — Cortex-M4F / M7F | ✅ |
+| `thumbv8m.main` — Cortex-M33 | ✅ |
+| `thumbv6m` — Cortex-M0 / M0+ (`critical-section`) | ✅ 🏃 QEMU |
+| `riscv32imac` — RISC-V with A extension | ✅ |
+| `riscv32imc` — ESP32-C3 (`critical-section`) | ✅ |
+| `aarch64-unknown-none` — 64-bit bare metal | ✅ |
 | MSRV: Rust 1.70.0 | ✅ |
 
 ## License

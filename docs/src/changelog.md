@@ -2,6 +2,16 @@
 
 See the full [CHANGELOG.md](https://github.com/ddsha441981/pulse_map/blob/main/CHANGELOG.md) in the repository root.
 
+## Unreleased (v0.6.5)
+
+### 🧠 AccessBuffer Drain + Validation & Embedded Proofs
+
+- **AccessBuffer drain**: deferred LRU/LFU updates buffered by `get()` are now drained on the write path. `ConcurrentPulseMap::get()` ties `TypedPulseMap` at **95.372%** hit rate (peek-only control: 94.456% — counting reads is worth +0.92 points). Read latency is untouched: the drain runs inside `insert()`. Ships with a `BucketGuard` fix so the drain is Miri-clean.
+- **Validation**: cargo-fuzz shadow-map oracle (**5.46M executions clean** under AddressSanitizer), Miri in CI for both engine and sync configs, loom models for the `MetaWord` CAS and `AccessBuffer`, multi-threaded soak at **+0.0 MB RSS drift** (147.9M ops).
+- **Embedded**: 8-target `cargo check` matrix in CI — `thumbv6m` (Cortex-M0) and `riscv32imc` (ESP32-C3) now compile via the opt-in `critical-section` feature. QEMU-executed tests on Cortex-M3 and Cortex-M0: 12 assertions, heap measured at **128 B per bucket** (2 KiB for a 16-bucket map).
+
+---
+
 ## v0.6.4 (2026-08-19)
 
 ### 🌍 Portable AtomicU64 — Cross-Platform Compatibility

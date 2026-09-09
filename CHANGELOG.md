@@ -10,7 +10,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### 🔬 Validation & Hardening
 
-A validation release, not a feature release: it exists to prove the correctness of the `unsafe` and lock-free code that is already shipping. `src/` carries no logic changes — only test attributes and cfg-gated atomic imports.
+A validation release at heart, but with one `src/` logic change: the AccessBuffer drain (PR #24) below. Everything else in `src/` is test attributes and cfg-gated atomic imports.
 
 **cargo-fuzz harness (`fuzz/`) — issue #7, PR #13 (@saiteja00743)**
 - New `fuzz_sequences` target driving random `insert` / `get` / `remove` sequences with TTL and eviction pressure, re-reading the last insert to catch silent corruption
@@ -62,6 +62,12 @@ A validation release, not a feature release: it exists to prove the correctness 
 - **Measured: a map costs 128 bytes per bucket**, allocated upfront regardless of occupancy — 64 B for the cache-line `Bucket` plus 4 × 16 B of `SlotTTL` for its slots. Found the hard way: a 64-bucket map exhausted an 8 KiB heap. The test now runs 16 buckets / 2 KiB and prints its own heap usage (3072 B for three maps) into the CI log. The README's 40.0 B/entry figure is consistent with this, but bucket count, not entry count, is the number to budget with on a 16 KiB part
 - Still not covered, deliberately: `riscv32imc` (ESP32-C3). `qemu-system-riscv32 -machine virt` has the A extension, so emulating it would test a target that does not need the feature. And nothing has run on physical silicon
 - `qemu-test/` is its own workspace with its own `.cargo/config.toml` runner, the same isolation `fuzz/` uses, so it never affects a host build of `pulse_map`
+
+**AccessBuffer drain — PR #24**
+- `ConcurrentPulseMap::get()` buffers its LRU/LFU priority updates in the `AccessBuffer` (introduced v0.6.2), but nothing ever drained the buffer — so reads never fed the eviction policy. Its hit rate sat 0.92 points under `TypedPulseMap`'s: **94.456% vs 95.372%** in the `hitrate_16384` benchmark
+- `insert()` now drains the buffer under the target bucket's lock, so read latency is untouched: the drain runs on the write path only
+- Ships with a `BucketGuard` fix so the drain is Miri-clean
+- Result: `ConcurrentPulseMap::get()` ties `TypedPulseMap` at **95.372%**
 
 ---
 
