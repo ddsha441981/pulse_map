@@ -16,7 +16,7 @@ PulseMap solves this by packing **everything into one 64-byte cache line**:
 ```
 PulseMap Bucket (64 bytes):
   ┌─────────────────────────────────────────────────┐
-  │ MetaWord (8 bytes, AtomicU64 for lock-free reads)│
+  │ MetaWord (8 bytes, AtomicU64, lock-free metadata)│
   │  ├── 4× Slot state (2 bits each)                │
   │  ├── 4× H2 fingerprint (7 bits each)            │
   │  └── 4× Priority (7 bits each: freq[4]+rec[3])  │

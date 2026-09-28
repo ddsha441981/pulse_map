@@ -6,11 +6,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
-## [Unreleased] — v0.6.5
+## [0.6.5] — 2026-09-28
 
 ### 🔬 Validation & Hardening
 
-A validation release, not a feature release: it exists to prove the correctness of the `unsafe` and lock-free code that is already shipping. `src/` carries no logic changes — only test attributes and cfg-gated atomic imports.
+A validation and hardening release, not a feature release: it exists to prove the correctness of the `unsafe` and lock-free code that is already shipping. Outside a single behavioural fix — the `AccessBuffer` drain (below), which makes `ConcurrentPulseMap` reads feed the eviction policy — `src/` carries no logic changes, only test attributes and cfg-gated atomic imports.
 
 **cargo-fuzz harness (`fuzz/`) — issue #7, PR #13 (@saiteja00743)**
 - New `fuzz_sequences` target driving random `insert` / `get` / `remove` sequences with TTL and eviction pressure, re-reading the last insert to catch silent corruption

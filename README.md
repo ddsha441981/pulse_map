@@ -697,7 +697,7 @@ pulse_map_free(map);
 ## Known Limitations
 
 - Lookup is ~2x slower than quick_cache on mixed workloads — serialization trade-off for `no_std`/FFI
-- Lock-free reads via AtomicU64 MetaWord (v0.6.2+) — reads no longer acquire bucket spinlocks
+- Reads are not fully lock-free — MetaWord's `AtomicU64` keeps LRU/LFU updates off the bucket spinlock (v0.6.2+), but slab-mode entries (keys/values past the 6B/7B inline window, which includes every `u64` key) still take the slab pool lock to read the value
 - On low-contention, general-purpose read/write mixed workloads, QuickCache is modestly faster (see [Where PulseMap Fits](#where-pulsemap-fits)) — PulseMap's edge is specifically under contention and in memory footprint, not universal
 - **No performance figure has ever been measured on a microcontroller.** Every number in this README is x86_64. The QEMU job proves the code *runs* on Cortex-M0, but QEMU is not cycle-accurate — no pipeline model, no flash wait states, no bus contention — so it cannot honestly produce a timing figure. Treat "fast on embedded" as unproven until someone measures it on real silicon (an RP2040 is the natural part: Cortex-M0+, and it actually needs `critical-section`)
 - **On Cortex-M3-class parts PulseMap costs more flash than `lru`** — 9,792 B vs 7,576 B over baseline, measured. `portable-atomic`'s spinlock `AtomicU64` fallback is fatter than the `critical-section` route an M0 takes. Where flash is the binding constraint there, `lru` is the smaller choice; RAM still favours PulseMap (2,048 B vs 4,520 B at 64 entries)
