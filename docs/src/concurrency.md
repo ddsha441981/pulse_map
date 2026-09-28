@@ -18,7 +18,7 @@ Level 2: Per-Bucket Spinlock (AtomicU8)
 
 ### Why This Works
 
-- **Lock-free reads:** MetaWord uses `AtomicU64` for lock-free reads, and `get()` pushes to a deferred `AccessBuffer` without acquiring exclusive bucket spinlocks for metadata updates.
+- **Spinlock-free metadata on reads:** MetaWord uses `AtomicU64`, and `get()` records LRU/LFU updates into a deferred `AccessBuffer` without taking a bucket spinlock. The value read itself is not lock-free for slab-mode entries (keys/values past the 6B/7B inline window, including every `u64` key) — those take the slab pool lock.
 - **Drain on the write path:** queued access events are applied by `insert()` — each insert drains up to 64 events into its eviction decision before taking the bucket spinlock. Reads therefore carry eviction weight without any lock on the read path.
 - **Different buckets = zero contention.** Two threads accessing different buckets for writes run fully in parallel.
 - **Same bucket = brief spinlock.** Bucket write operations are ~10ns, so spin wait is negligible.

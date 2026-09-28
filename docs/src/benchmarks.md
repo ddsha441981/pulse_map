@@ -22,7 +22,7 @@
 ### Where PulseMap Loses
 
 **Pure lookup** — PulseMap stores values as serialized bytes (enabling `no_std` + FFI bindings), which adds deserialization cost on read.
-*Note: `AtomicU64` lock-free reads and `AccessBuffer` narrowed the gap on concurrent lookups in v0.6.2.*
+*Note: the `AtomicU64` MetaWord (spinlock-free metadata updates) and `AccessBuffer` narrowed the gap on concurrent lookups in v0.6.2.*
 
 - quick_cache lookup: **1.5x faster** than PulseMap
 - lru lookup: PulseMap is now faster (4.2 ms vs 5.4 ms)
