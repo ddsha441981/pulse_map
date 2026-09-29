@@ -15,6 +15,8 @@ documentation = "https://ddsha441981.github.io/pulse_map/"
 readme = "README.md"
 keywords = ["cache", "hashmap", "lru", "lfu", "no-std"]
 categories = ["data-structures", "caching", "no-std", "concurrency"]
+# Keep IDE config and stray example output out of the published crate.
+exclude = [".idea/", "*.out"]
 
 [package.metadata.docs.rs]
 all-features = true
