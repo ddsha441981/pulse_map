@@ -577,9 +577,7 @@ impl<K: PulseKey, V: PulseValue> ConcurrentPulseMap<K, V> {
                 let val_bytes = slot.get_value_bytes(&slab).to_vec();
                 drop(slab);
 
-                if key_bytes.is_empty() {
-                    continue;
-                }
+                // Full state establishes occupancy; an empty byte key is valid.
 
                 // Preserve the original TTL data for this slot
                 let ttl_idx = bucket_idx * 4 + slot_idx as usize;
