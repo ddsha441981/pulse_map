@@ -36,3 +36,26 @@ Synthetic routing/H2 independence through 32-bit masks, auto-growth TTL, inline/
 resident preservation and concurrent growth checks passed. Small tests passed Miri;
 the large allocation probe is ignored only under Miri. All-features (60 unit +
 10 integration + 11 doc), formatting and Clippy passed.
+
+## T03 — access-buffer ownership across wrap
+
+Both 64-slot and production 4,096-slot forced-overlap regressions failed before
+(duplicate events 65 and 4097) and pass after sequence-tagged reservation/publication.
+One CAS attempt per push/pop; contention/full/unpublished head skips instead of
+waiting. Slots are released before callbacks, preventing reuse races and callback
+panic poisoning. Removed the inaccurate formal lock-free claim. Payload now uses
+usize with two slot bits, eliminating silent 24-bit bucket-index truncation.
+Resize discards old-layout access hints under the exclusive map lock.
+
+Checks: 66 unit + 10 integration + 11 doc tests, Clippy/fmt, 6 Loom models (including
+two-slot generation reuse), 5 small buffer Miri tests all passed. Production-sized
+Miri case is covered by its small deterministic equivalent.
+
+Full paired before/after evidence: `results/after-correctness/`. Across all 21
+single-threaded trace/seed combinations, each candidate map has exactly its matching
+baseline's hit counts and residents. Correctness has a measurable cost: slots now
+hold two usize atomics (16 B on x86_64, previously 4 B). Buffer allocation increases
+by 48 KiB per Concurrent map / 768 KiB across 16 shards. Typed/no_std memory is
+unchanged. Sharded u32 throughput was lower in this session (e.g. four-thread
+candidate 9.397–9.841 vs baseline 10.418–12.143 Mops/s); noisy data is retained in
+full. This is a correctness release, not a universal speed/memory improvement.

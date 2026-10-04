@@ -7,14 +7,8 @@
 //! happen is a *wrong* delivery — a torn or fabricated event, or the same event
 //! handed to `drain` twice. That is what these models check.
 //!
-//! Measured limit of this model: it does **not** cover the store order inside
-//! `push`. Swapping the two stores so the new head is released before the packed
-//! event is written is a real bug — a drain that sees the head advance consumes an
-//! `EMPTY` slot and the event is lost for good — and the tests below still pass on
-//! it. loom explored 6 executions at every preemption bound tried (1, 2, 3, 5 and
-//! the default unbounded) and never scheduled the drain between the two stores.
-//! Dropping the payload store altogether does fail the tests, so the assertions
-//! are live; it is the interleaving that is out of reach.
+//! Includes a two-slot repeated-generation model. Payload publication and slot
+//! reuse are synchronized by per-slot sequences, independently of head/tail claims.
 //!
 //! Run:
 //!   RUSTFLAGS="--cfg loom" cargo test --test loom_access_buffer
@@ -31,10 +25,8 @@ const PUSHED: [(usize, u8); 2] = [(1, 0), (2, 1)];
 
 /// Two producers racing one drain.
 ///
-/// Note what is deliberately *not* asserted: that both events come out. `push`
-/// is a single-producer design — two producers can read the same head and write
-/// the same slot, so one event is overwritten while both calls return `true`.
-/// That is loss, which the buffer's contract allows.
+/// Racing producers can fail a reservation CAS and drop their event. At least one
+/// succeeds when the buffer is empty; no successful reservation is overwritten.
 #[test]
 fn concurrent_push_drain_never_delivers_a_wrong_event() {
     loom::model(|| {
@@ -112,13 +104,8 @@ fn single_producer_event_is_never_torn() {
     });
 }
 
-/// Two drains racing each other over pre-pushed events — the direct model for
-/// the CAS claim in `drain`'s multi-consumer path.
-///
-/// The claim is all-or-nothing on a range, so a failed claim returns without
-/// consuming anything. Therefore, across both drains, every pushed event must
-/// come out exactly once: no event lost to both drains abstaining, and none
-/// delivered twice.
+/// Two consumers claim individual ready positions; a failed CAS may stop a drain.
+/// Once both finish, flush remaining events and require exactly-once delivery.
 ///
 /// Three threads total (model + two drains), inside loom's four-thread budget.
 #[test]
@@ -145,6 +132,10 @@ fn concurrent_drains_deliver_every_event_exactly_once() {
             d.join().unwrap();
         }
 
+        buf.drain(4, |bucket, slot| {
+            delivered.lock().unwrap().push((bucket, slot))
+        });
+
         let mut events = delivered.lock().unwrap().clone();
         events.sort();
         assert_eq!(
@@ -152,5 +143,51 @@ fn concurrent_drains_deliver_every_event_exactly_once() {
             vec![(1, 0), (2, 1)],
             "both events must be delivered exactly once across two concurrent drains"
         );
+    });
+}
+
+#[test]
+fn tiny_ring_reuse_never_duplicates_or_fabricates_events() {
+    let mut model = loom::model::Builder::new();
+    model.preemption_bound = Some(2);
+    model.check(|| {
+        let buf = Arc::new(AccessBuffer::new(2));
+        assert!(buf.push(10, 0));
+        assert!(buf.push(11, 1));
+        let producer = {
+            let buf = buf.clone();
+            loom::thread::spawn(move || {
+                let mut accepted = vec![];
+                for key in 12..14 {
+                    if buf.push(key, 2) {
+                        accepted.push((key, 2));
+                    }
+                    loom::thread::yield_now();
+                }
+                accepted
+            })
+        };
+        let consumer = {
+            let buf = buf.clone();
+            loom::thread::spawn(move || {
+                let mut events = vec![];
+                for _ in 0..3 {
+                    buf.drain(1, |b, s| {
+                        events.push((b, s));
+                        loom::thread::yield_now();
+                    });
+                }
+                events
+            })
+        };
+        let mut events = vec![];
+        buf.drain(2, |b, s| events.push((b, s)));
+        let mut accepted = producer.join().unwrap();
+        accepted.extend([(10, 0), (11, 1)]);
+        events.extend(consumer.join().unwrap());
+        buf.drain(4, |b, s| events.push((b, s)));
+        events.sort();
+        accepted.sort();
+        assert_eq!(events, accepted);
     });
 }

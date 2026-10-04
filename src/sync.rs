@@ -167,7 +167,7 @@ pub struct ConcurrentPulseMap<K: PulseKey, V: PulseValue> {
     current_epoch: AtomicU64,
     /// Default TTL in insertion epochs. 0 = disabled.
     default_ttl: AtomicU64,
-    /// Lock-free ring buffer for deferred LRU/LFU access tracking.
+    /// Bounded lossy ring buffer for deferred LRU/LFU access tracking.
     /// Reads push events here instead of mutating MetaWord inline.
     access_buffer: AccessBuffer,
     _marker: PhantomData<(K, V)>,
@@ -330,7 +330,7 @@ impl<K: PulseKey, V: PulseValue> ConcurrentPulseMap<K, V> {
         // the retag (Miri: data race on the Bucket allocation). Guards are
         // never nested — the drain runs before this insert's own BucketGuard,
         // and the callback releases each target lock before the next event.
-        // No lock-order cycle: AccessBuffer itself is lock-free.
+        // Buffer operations do not wait or hold a guard across the callback.
         self.access_buffer
             .drain(Self::DRAIN_BATCH, |bucket_idx, slot_idx| {
                 let _target_guard = BucketGuard::new(&state.locks, bucket_idx);
@@ -562,6 +562,10 @@ impl<K: PulseKey, V: PulseValue> ConcurrentPulseMap<K, V> {
         if state.num_buckets >= new_actual {
             return;
         }
+
+        // Queued bucket/slot indices refer to the old layout. Discard these
+        // approximate policy hints while no reader/writer can enqueue more.
+        self.access_buffer.clear();
 
         // Collect all live entries with their TTL data before rehashing.
         // This decouples extraction from insertion so we can retry with a
