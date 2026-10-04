@@ -16,7 +16,7 @@ readme = "README.md"
 keywords = ["cache", "hashmap", "lru", "lfu", "no-std"]
 categories = ["data-structures", "caching", "no-std", "concurrency"]
 # Keep IDE config and stray example output out of the published crate.
-exclude = [".idea/", "*.out"]
+exclude = [".idea/", "*.out", "evaluation/"]
 
 [package.metadata.docs.rs]
 all-features = true
