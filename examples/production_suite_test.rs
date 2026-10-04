@@ -115,6 +115,8 @@ impl BenchCache for SimpleAdapter {
 }
 
 fn all_caches(capacity: usize) -> Vec<Box<dyn BenchCache>> {
+    assert!(capacity >= 64 && capacity.is_power_of_two());
+    println!("requested={capacity}, actual bounded-cache capacity={capacity}; Simple is unbounded");
     vec![
         Box::new(PulseAdapter(Arc::new(ShardedPulseMap::<u32, u32>::new(
             capacity / 64,
@@ -190,12 +192,12 @@ fn scenario_a() {
     println!("\n================================================================");
     println!("SCENARIO A — Realistic Mixed Workload (80% GET / 20% INSERT, Zipfian hot keys)");
     println!("================================================================");
-    println!("Key space: 200,000 | Cache capacity: 50,000 (forces real eviction)");
+    println!("Key space: 200,000 | Actual cache capacity: 65,536 (forces real eviction)");
     println!("Zipfian exponent 1.1 — a small set of keys gets most of the traffic,");
     println!("mirroring real cache access patterns (hot users, hot API routes, hot DNS names).\n");
 
     const KEY_SPACE: u64 = 200_000;
-    const CAPACITY: usize = 50_000;
+    const CAPACITY: usize = 65_536;
     const THREADS: u32 = 8;
     const OPS_PER_THREAD: u32 = 125_000; // 1M total
     const TRIALS: usize = 5;
@@ -319,12 +321,12 @@ fn scenario_a() {
 
 fn scenario_b() {
     println!("\n================================================================");
-    println!("SCENARIO B — Large Scale: 5M inserts, 200K capacity, memory footprint");
+    println!("SCENARIO B — Large Scale: 5M inserts, 262,144 actual capacity");
     println!("================================================================");
-    println!("Single-threaded, constant heavy eviction (cache is 2.5% of insert volume).");
-    println!("Measures RSS growth (actual memory cost per cache design), not just speed.\n");
+    println!("Single-threaded heavy eviction. In-process RSS is exploratory only.");
+    println!("Use memory_baseline or evaluation/ memory for fresh-process comparisons.\n");
 
-    const CAPACITY: usize = 200_000;
+    const CAPACITY: usize = 262_144;
     const NUM_INSERTS: u32 = 5_000_000;
     const TRIALS: usize = 3;
 
@@ -378,7 +380,7 @@ fn scenario_b() {
         );
     }
     println!("\nNote: RSS delta is a coarse proxy (process-wide, includes allocator/OS noise).");
-    println!("Trust the relative ordering more than the absolute MB numbers.");
+    println!("Allocator reuse and already-created maps confound both values and ordering.");
 }
 
 // ============================================================
@@ -405,7 +407,7 @@ fn scenario_c() {
     let mut results: Vec<Result> = Vec::new();
 
     for _ in 0..TRIALS {
-        let caches = all_caches(128); // capacity > keyspace, so no eviction noise here
+        let caches = all_caches(128); // Local collisions can still cause eviction.
         for cache in caches {
             let cache: Arc<dyn BenchCache> = Arc::from(cache);
             for i in 0..KEY_SPACE {

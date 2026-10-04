@@ -73,3 +73,31 @@ are correctly linked to their independently versioned C/Python/Java/Node project
 testing. All 25 executable examples pass, including lazy TTL occupancy assertions.
 Strict all-features rustdoc and `mdbook build` pass without warnings. Historical
 brain index dated locally; new result tables follow in T05.
+
+## T05 — fair workloads and complete paired evidence
+
+Expanded the in-repo suite with four-slot/realistic adaptation, explicit semantics,
+large-shard boundaries, host routing/sensor traces, and corrected host contention
+accounting. Captures include source/lockfile SHA256 and build environment. The
+all-trial report verifies **63 hit-rate + 32 adaptation + 6 host embedded paired
+rows** match in hits/residents. Full eight-scenario capture: `results/t05-full/`.
+
+Corrected root examples' rounded capacities; Criterion large bounded caches now
+all use 262,144 slots and print actual residents. Fresh-process memory example
+reports both denominators. Marked non-isolated RSS and descriptive timing spread
+as exploratory, not reliable rankings. CI gets an eight-scenario paired smoke job.
+
+Checks: evaluation tests (5), Clippy, all-scenario smoke and full capture; root
+all-target/all-feature Clippy; memory smoke; seven Criterion concurrent/sharded
+smoke cases. `report.py` verified deterministic parity and generated all-trial
+tables; README/guide reference them. The original separate eval checkout/results
+remain historical inputs; the corrected, reproducible suite is here in-repo.
+
+Strengths/costs: large-shard residents 821,839 → 967,051; scan resistance and inline
+typed memory preserved. No frequency aging: the four-slot hot-set shift still has
+0/400 new hits, and realistic phase changes trail LRU. The sequence buffer has
+extra per-slot ownership/publication work and 48 KiB/map fixed allocation cost.
+The repeat capture confirms lower 4T u64 sharded throughput (9.56–9.75 vs
+10.52–11.03 Mops/s); some other rows vary widely. Both capture sessions are kept;
+correctness fixes are accepted with disclosed overhead, with queue optimization
+left for measured follow-up rather than claiming a universal improvement.

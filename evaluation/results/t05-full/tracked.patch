@@ -1,0 +1,41 @@
+diff --git a/evaluation/src/main.rs b/evaluation/src/main.rs
+index 06d5659..b24073d 100644
+--- a/evaluation/src/main.rs
++++ b/evaluation/src/main.rs
+@@ -1,5 +1,6 @@
+ //! Reproducible candidate, published baseline and competitor evaluation.
+ //! See ../README.md; performance output is evidence, not a CI speed threshold.
++mod scenarios;
+ mod workload;
+ 
+ use std::hash::Hash;
+@@ -323,6 +324,11 @@ fn main() {
+     );
+     match scenario {
+         "hitrate" => hitrate(cap, count, trials),
++        "adapt" => scenarios::adaptation(smoke),
++        "semantics" => scenarios::semantics(),
++        "boundary" => scenarios::boundary(smoke),
++        "embedded" => scenarios::embedded(smoke),
++        "contention" => scenarios::contention(smoke),
+         "throughput" => {
+             println!(
+                 "kind,trial,cache,type,capacity,threads,ops,writes,hits,resident,seconds,mops"
+@@ -343,7 +349,7 @@ fn main() {
+             }
+         }
+         "all" => {
+-            for scenario in ["hitrate", "throughput", "memory"] {
++            for scenario in ["hitrate", "throughput", "memory", "adapt", "semantics", "boundary", "embedded", "contention"] {
+                 let mut cmd = std::process::Command::new(std::env::current_exe().unwrap());
+                 cmd.arg(scenario);
+                 if smoke {
+@@ -352,7 +358,7 @@ fn main() {
+                 assert!(cmd.status().unwrap().success());
+             }
+         }
+-        _ => panic!("use all | hitrate | throughput | memory [--smoke]"),
++        _ => panic!("use all | hitrate | throughput | memory | adapt | semantics | boundary | embedded | contention [--smoke]"),
+     }
+ }
+ 

@@ -14,7 +14,7 @@ cargo run --release --locked -- hitrate
 cargo run --release --locked -- throughput
 cargo run --release --locked -- memory
 cargo metadata --locked --format-version 1 --filter-platform x86_64-unknown-linux-gnu
-python3 capture.py before --smoke
+python3 capture.py my-unique-label --smoke
 ```
 
 The first two commands test methodology/adapters and exercise every scenario. They
@@ -38,6 +38,17 @@ four-way local eviction still means different numbers of resident entries.
   final occupancy. Hit-rate loop allows its normal deferred maintenance.
 - LRU: native single-threaded for hit-rate; `Mutex<LruCache>` for threaded scenarios.
   Typed PulseMap is excluded from threaded results rather than silently adding a lock.
+- `adapt`: warmed four-slot reproduction and 1,024/65,536-slot working-set shifts,
+  followed by a 3×capacity cold scan and ten hot-set passes. Same sequences per map.
+- `semantics`: strict TTL boundary, occupied/iterator inclusion, reversible lazy
+  visibility and never-expire sentinel, asserted on baseline and candidate.
+- `boundary`: 1M u32 keys with 8,192/16,384/32,768 buckets per shard, counts plus
+  value checks on every surviving key. Smoke uses smaller allocation sizes.
+- `embedded`: host u32/u32 routing and sensor traces, three shared seeds. This is
+  not bare-metal execution; the separate qemu-test/ owns MCU instruction/allocation checks.
+- `contention`: host writer/reader simulation, one always-resident hot key for equal
+  hit work. LRU guard is dropped before timestamp/sample recording. Reports hits,
+  read counts and samples while the writer is active, not just an unqualified p99.
 
 ## Reporting rules
 
@@ -51,5 +62,21 @@ defaults; these are end-to-end library comparisons, not isolated algorithm timin
 `--smoke` is for correctness/CI. CI never gates on wall-clock speed or RSS. Real MCU
 performance needs physical hardware; this executable is a host benchmark.
 
-The separate root Criterion suite is historical; its fairness fixes/results are
-tracked in v0.6.6 T05. Do not mix old timing tables with this harness's results.
+The root Criterion suite now equalizes nominal capacity (262,144 for large cases,
+1,024 for eviction) and prints resident counts. Its timings include spawn/join,
+some raw/string/iterator cases are separate references, and HashMap is unbounded.
+Old root examples are exploratory; this pinned suite supplies published comparisons.
+
+## Current evidence
+
+- [Full T05 report](results/t05-full/report.md), [raw CSV/provenance](results/t05-full/).
+- [Before](results/before/) and [first correctness capture](results/after-correctness/)
+  are preserved, including slower candidate measurements.
+- `python3 report.py results/t05-full` regenerates all-trial tables and verifies
+  paired deterministic hit/resident parity. It does not gate noisy timing or RSS.
+
+This in-repo suite supersedes stale pre-drain output in the separate author's eval
+checkout. Its original findings remain valid for their version/workload; “beats LRU
+on every skew” is not supported (Zipf 1.30 and large hot+scan can favour LRU).
+The corrected host simulation applies the same guard/sample accounting to both
+PulseMap versions and Mutex<LRU>. Original files/results are retained as history.

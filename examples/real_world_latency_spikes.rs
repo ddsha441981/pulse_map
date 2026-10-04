@@ -28,7 +28,7 @@ use std::sync::{Arc, Barrier, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
-const MAX_CAPACITY: usize = 100_000;
+const MAX_CAPACITY: usize = 131_072; // Equal actual capacity, no bucket rounding mismatch.
 const NUM_INSERTS: u32 = 1_000_000;
 const NUM_THREADS: u32 = 8;
 const NUM_TRIALS: usize = 15;
@@ -155,9 +155,7 @@ fn print_stats(s: &Stats) {
     );
 }
 
-/// Prints a verdict for a head-to-head pair: is the gap in p99 bigger than
-/// the combined noise (stddev) of both? If yes, it's a real difference.
-/// If the gap is smaller than ~1 combined stddev, call it a statistical tie.
+/// Descriptive spread comparison only, not a statistical significance test.
 fn verdict(a: &Stats, b: &Stats) {
     let gap = (a.p99_mean - b.p99_mean).abs();
     let combined_std = a.p99_std + b.p99_std;
@@ -175,16 +173,17 @@ fn verdict(a: &Stats, b: &Stats) {
             b.name
         };
         println!(
-            "  -> {winner} is reliably lower p99 across {NUM_TRIALS} trials (gap exceeds noise)."
+            "  -> {winner} has lower observed p99; this spread comparison is not a significance test."
         );
     } else {
-        println!(
-            "  -> statistical tie: gap is within run-to-run noise, don't claim a winner here."
-        );
+        println!("  -> gap is within observed run-to-run spread; don't claim a winner here.");
     }
 }
 
 fn main() {
+    println!(
+        "requested/actual bounded-cache capacity={MAX_CAPACITY}; Simple is unbounded; host timings"
+    );
     println!("⏱️  STATISTICAL MULTI-THREADED WRITE-PRESSURE BENCHMARK ⏱️\n");
     println!("{NUM_THREADS} threads, {NUM_INSERTS} inserts/trial, {NUM_TRIALS} independent trials/cache (fresh cache each trial).\n");
     println!("Running... this takes a while with {NUM_TRIALS} trials x 5 caches.\n");

@@ -37,6 +37,7 @@ use std::time::{Duration, Instant};
 // ============================================================
 
 trait BenchCache: Send + Sync + 'static {
+    fn resident(&self) -> usize;
     fn insert(&self, k: u32, v: u32);
     fn get(&self, k: u32) -> Option<u32>;
     fn name(&self) -> &'static str;
@@ -44,6 +45,9 @@ trait BenchCache: Send + Sync + 'static {
 
 struct PulseAdapter(Arc<ShardedPulseMap<u32, u32>>);
 impl BenchCache for PulseAdapter {
+    fn resident(&self) -> usize {
+        self.0.len()
+    }
     fn insert(&self, k: u32, v: u32) {
         self.0.insert(k, v);
     }
@@ -57,6 +61,10 @@ impl BenchCache for PulseAdapter {
 
 struct MokaAdapter(Arc<MokaCache<u32, u32>>);
 impl BenchCache for MokaAdapter {
+    fn resident(&self) -> usize {
+        self.0.run_pending_tasks();
+        self.0.entry_count() as usize
+    }
     fn insert(&self, k: u32, v: u32) {
         self.0.insert(k, v);
     }
@@ -70,6 +78,9 @@ impl BenchCache for MokaAdapter {
 
 struct QuickAdapter(Arc<QuickCache<u32, u32>>);
 impl BenchCache for QuickAdapter {
+    fn resident(&self) -> usize {
+        self.0.len()
+    }
     fn insert(&self, k: u32, v: u32) {
         self.0.insert(k, v);
     }
@@ -83,6 +94,9 @@ impl BenchCache for QuickAdapter {
 
 struct LruAdapter(Arc<Mutex<LruCache<u32, u32>>>);
 impl BenchCache for LruAdapter {
+    fn resident(&self) -> usize {
+        self.0.lock().unwrap().len()
+    }
     fn insert(&self, k: u32, v: u32) {
         self.0.lock().unwrap().put(k, v);
     }
@@ -95,6 +109,8 @@ impl BenchCache for LruAdapter {
 }
 
 fn quality_caches(capacity: usize) -> Vec<Box<dyn BenchCache>> {
+    assert!(capacity >= 64 && capacity.is_power_of_two());
+    println!("requested={capacity}, actual nominal capacity={capacity} for all caches");
     // Simple/Mutex<HashMap> excluded here on purpose — it has no eviction
     // policy at all, so a "hit rate" comparison against it isn't meaningful.
     vec![
@@ -148,14 +164,14 @@ fn scenario_d() {
     println!("\n================================================================");
     println!("SCENARIO D — Eviction Quality: Hit Rate Under Memory Pressure");
     println!("================================================================");
-    println!("Capacity: 10,000 | Key space: 100,000 (cache is 10% of working set)");
+    println!("Actual capacity: 16,384 | Key space: 100,000");
     println!("Zipfian exponent 1.3 (strongly skewed — a real 'hot/cold' access pattern).");
     println!("Each access: try GET; on miss, INSERT (classic cache-fill-on-miss simulation).");
     println!("This measures whether the eviction POLICY keeps the right keys hot —");
     println!("not insert speed. Single-threaded so eviction-policy differences aren't");
     println!("muddied by lock-contention noise.\n");
 
-    const CAPACITY: usize = 10_000;
+    const CAPACITY: usize = 16_384;
     const KEY_SPACE: u64 = 100_000;
     const TOTAL_ACCESSES: u32 = 2_000_000;
     const TRIALS: usize = 5;
@@ -187,6 +203,11 @@ fn scenario_d() {
                 }
             }
             let hit_rate = hits as f64 / TOTAL_ACCESSES as f64 * 100.0;
+            println!(
+                "trial={trial} cache={} hits={hits} ops={TOTAL_ACCESSES} residents={}",
+                cache.name(),
+                cache.resident()
+            );
 
             let name = cache.name();
             match results.iter_mut().find(|r| r.name == name) {
@@ -223,12 +244,12 @@ fn scenario_e() {
     println!("\n================================================================");
     println!("SCENARIO E — Read-Heavy Workload (99% GET / 1% INSERT, Zipfian hot keys)");
     println!("================================================================");
-    println!("Key space: 200,000 | Capacity: 50,000 | 8 threads | Zipfian exponent 1.1");
+    println!("Key space: 200,000 | Actual capacity: 65,536 | 8 threads | Zipfian exponent 1.1");
     println!("Most production caches look like this: reads dominate, writes are rare");
     println!("(session lookups, config reads, DNS resolution, feature-flag checks).\n");
 
     const KEY_SPACE: u64 = 200_000;
-    const CAPACITY: usize = 50_000;
+    const CAPACITY: usize = 65_536;
     const THREADS: u32 = 8;
     const OPS_PER_THREAD: u32 = 125_000; // 1M total
     const TRIALS: usize = 5;
@@ -241,7 +262,7 @@ fn scenario_e() {
     }
     let mut results: Vec<Result> = Vec::new();
 
-    for _ in 0..TRIALS {
+    for trial in 0..TRIALS {
         let caches = quality_caches(CAPACITY); // reuse the 4-cache set (no Simple)
         for cache in caches {
             let cache: Arc<dyn BenchCache> = Arc::from(cache);
@@ -252,11 +273,11 @@ fn scenario_e() {
             let barrier = Arc::new(Barrier::new(THREADS as usize));
             let start = Instant::now();
             let handles: Vec<_> = (0..THREADS)
-                .map(|_| {
+                .map(|worker| {
                     let cache = Arc::clone(&cache);
                     let barrier = Arc::clone(&barrier);
                     thread::spawn(move || {
-                        let mut rng = rand::thread_rng();
+                        let mut rng = StdRng::seed_from_u64(42 + trial as u64 * 8 + worker as u64);
                         let zipf = Zipf::new(KEY_SPACE, 1.1).unwrap();
                         let mut get_lat = Vec::with_capacity(OPS_PER_THREAD as usize);
                         let mut hits = 0u32;
@@ -293,6 +314,11 @@ fn scenario_e() {
             let total_ms = start.elapsed().as_secs_f64() * 1000.0;
             let (_, get_p99) = percentiles_ns(&all_get);
             let hit_rate = total_hits as f64 / total_gets as f64 * 100.0;
+            println!(
+                "trial={trial} cache={} reads={total_gets} hits={total_hits} residents={}",
+                cache.name(),
+                cache.resident()
+            );
 
             let name = cache.name();
             match results.iter_mut().find(|r| r.name == name) {

@@ -7,6 +7,35 @@ use pulse_map::{PulseMap, TypedPulseMap};
 use std::collections::HashMap;
 use std::num::NonZeroUsize;
 
+// Large PulseMap setups below round 38,461 buckets to 65,536 = 262,144 slots.
+// Every bounded competitor must receive that actual capacity, not 154,000.
+// Threaded cases include spawn/join; use evaluation/ for ready-barrier timing,
+// paired versions, operation counts, residency and like-for-like payload tables.
+const LARGE_CAPACITY: usize = 262_144;
+
+fn report_capacity(_: &mut Criterion) {
+    let mut typed = TypedPulseMap::<u32, u32>::new(38461);
+    let concurrent = ConcurrentPulseMap::<u32, u32>::new(38461);
+    let sharded = ShardedPulseMap::<u32, u32>::new(4096);
+    let mut lru = LruCache::new(NonZeroUsize::new(LARGE_CAPACITY).unwrap());
+    let quick = quick_cache::sync::Cache::new(LARGE_CAPACITY);
+    let moka = moka::sync::Cache::new(LARGE_CAPACITY as u64);
+    assert_eq!(typed.capacity(), LARGE_CAPACITY);
+    assert_eq!(concurrent.capacity(), LARGE_CAPACITY);
+    assert_eq!(sharded.capacity(), LARGE_CAPACITY);
+    for k in 0..100_000u32 {
+        typed.insert(k, k * 2);
+        concurrent.insert(k, k * 2);
+        sharded.insert(k, k * 2);
+        lru.put(k, k * 2);
+        quick.insert(k, k * 2);
+        moka.insert(k, k * 2);
+    }
+    moka.run_pending_tasks();
+    eprintln!("Large suite requested/actual capacity={LARGE_CAPACITY}; 100K sequential-key residents: typed={} concurrent={} sharded={} lru={} quick={} moka={}", typed.len(), concurrent.len(), sharded.len(), lru.len(), quick.len(), moka.entry_count());
+    eprintln!("Eviction suite actual capacity=1024. Raw uses byte payloads; string/iterator and unbounded std are separate references. Threaded workloads include spawn/join.");
+}
+
 // ═══════════════════════════════════════
 // PulseMap (Raw) Benchmarks
 // ═══════════════════════════════════════
@@ -154,7 +183,7 @@ fn pulse_typed_iterator(c: &mut Criterion) {
 fn lru_insert_100k(c: &mut Criterion) {
     c.bench_function("lru_insert_100k", |b| {
         b.iter(|| {
-            let cap = NonZeroUsize::new(154_000).unwrap(); // ~same capacity as PulseMap
+            let cap = NonZeroUsize::new(LARGE_CAPACITY).unwrap();
             let mut cache = LruCache::<u32, u32>::new(cap);
             for i in 0u32..100_000 {
                 cache.put(i, i * 2);
@@ -165,7 +194,7 @@ fn lru_insert_100k(c: &mut Criterion) {
 }
 
 fn lru_lookup_100k(c: &mut Criterion) {
-    let cap = NonZeroUsize::new(154_000).unwrap();
+    let cap = NonZeroUsize::new(LARGE_CAPACITY).unwrap();
     let mut cache = LruCache::<u32, u32>::new(cap);
     for i in 0u32..100_000 {
         cache.put(i, i * 2);
@@ -186,7 +215,7 @@ fn lru_lookup_100k(c: &mut Criterion) {
 fn lru_mixed_100k(c: &mut Criterion) {
     c.bench_function("lru_mixed_100k", |b| {
         b.iter(|| {
-            let cap = NonZeroUsize::new(154_000).unwrap();
+            let cap = NonZeroUsize::new(LARGE_CAPACITY).unwrap();
             let mut cache = LruCache::<u32, u32>::new(cap);
             for i in 0u32..100_000 {
                 cache.put(i, i * 2);
@@ -218,7 +247,7 @@ fn lru_eviction_50k(c: &mut Criterion) {
 fn moka_insert_100k(c: &mut Criterion) {
     c.bench_function("moka_insert_100k", |b| {
         b.iter(|| {
-            let cache: moka::sync::Cache<u32, u32> = moka::sync::Cache::new(154_000);
+            let cache: moka::sync::Cache<u32, u32> = moka::sync::Cache::new(LARGE_CAPACITY as u64);
             for i in 0u32..100_000 {
                 cache.insert(i, i * 2);
             }
@@ -228,7 +257,7 @@ fn moka_insert_100k(c: &mut Criterion) {
 }
 
 fn moka_lookup_100k(c: &mut Criterion) {
-    let cache: moka::sync::Cache<u32, u32> = moka::sync::Cache::new(154_000);
+    let cache: moka::sync::Cache<u32, u32> = moka::sync::Cache::new(LARGE_CAPACITY as u64);
     for i in 0u32..100_000 {
         cache.insert(i, i * 2);
     }
@@ -249,7 +278,7 @@ fn moka_lookup_100k(c: &mut Criterion) {
 fn moka_mixed_100k(c: &mut Criterion) {
     c.bench_function("moka_mixed_100k", |b| {
         b.iter(|| {
-            let cache: moka::sync::Cache<u32, u32> = moka::sync::Cache::new(154_000);
+            let cache: moka::sync::Cache<u32, u32> = moka::sync::Cache::new(LARGE_CAPACITY as u64);
             for i in 0u32..100_000 {
                 cache.insert(i, i * 2);
                 if i > 0 {
@@ -279,7 +308,8 @@ fn moka_eviction_50k(c: &mut Criterion) {
 fn quick_insert_100k(c: &mut Criterion) {
     c.bench_function("quick_insert_100k", |b| {
         b.iter(|| {
-            let cache: quick_cache::sync::Cache<u32, u32> = quick_cache::sync::Cache::new(154_000);
+            let cache: quick_cache::sync::Cache<u32, u32> =
+                quick_cache::sync::Cache::new(LARGE_CAPACITY);
             for i in 0u32..100_000 {
                 cache.insert(i, i * 2);
             }
@@ -289,7 +319,7 @@ fn quick_insert_100k(c: &mut Criterion) {
 }
 
 fn quick_lookup_100k(c: &mut Criterion) {
-    let cache: quick_cache::sync::Cache<u32, u32> = quick_cache::sync::Cache::new(154_000);
+    let cache: quick_cache::sync::Cache<u32, u32> = quick_cache::sync::Cache::new(LARGE_CAPACITY);
     for i in 0u32..100_000 {
         cache.insert(i, i * 2);
     }
@@ -309,7 +339,8 @@ fn quick_lookup_100k(c: &mut Criterion) {
 fn quick_mixed_100k(c: &mut Criterion) {
     c.bench_function("quick_mixed_100k", |b| {
         b.iter(|| {
-            let cache: quick_cache::sync::Cache<u32, u32> = quick_cache::sync::Cache::new(154_000);
+            let cache: quick_cache::sync::Cache<u32, u32> =
+                quick_cache::sync::Cache::new(LARGE_CAPACITY);
             for i in 0u32..100_000 {
                 cache.insert(i, i * 2);
                 if i > 0 {
@@ -576,7 +607,7 @@ fn sharded_mixed_4t_100k(c: &mut Criterion) {
 fn moka_insert_4t_100k(c: &mut Criterion) {
     c.bench_function("moka_4t_insert_100k", |b| {
         b.iter(|| {
-            let cache: moka::sync::Cache<u32, u32> = moka::sync::Cache::new(154_000);
+            let cache: moka::sync::Cache<u32, u32> = moka::sync::Cache::new(LARGE_CAPACITY as u64);
             let cache = Arc::new(cache);
             let handles: Vec<_> = (0..4u32)
                 .map(|t| {
@@ -597,7 +628,7 @@ fn moka_insert_4t_100k(c: &mut Criterion) {
 }
 
 fn moka_lookup_4t_100k(c: &mut Criterion) {
-    let cache: moka::sync::Cache<u32, u32> = moka::sync::Cache::new(154_000);
+    let cache: moka::sync::Cache<u32, u32> = moka::sync::Cache::new(LARGE_CAPACITY as u64);
     for i in 0u32..100_000 {
         cache.insert(i, i * 2);
     }
@@ -627,7 +658,7 @@ fn moka_lookup_4t_100k(c: &mut Criterion) {
 fn moka_mixed_4t_100k(c: &mut Criterion) {
     c.bench_function("moka_4t_mixed_100k", |b| {
         b.iter(|| {
-            let cache: moka::sync::Cache<u32, u32> = moka::sync::Cache::new(154_000);
+            let cache: moka::sync::Cache<u32, u32> = moka::sync::Cache::new(LARGE_CAPACITY as u64);
             let cache = Arc::new(cache);
             let handles: Vec<_> = (0..4u32)
                 .map(|t| {
@@ -653,6 +684,7 @@ fn moka_mixed_4t_100k(c: &mut Criterion) {
 
 criterion_group!(
     benches,
+    report_capacity,
     // PulseMap Raw
     pulse_raw_insert_100k,
     pulse_raw_lookup_100k,
@@ -684,7 +716,7 @@ criterion_group!(
     std_lookup_100k,
     std_mixed_100k,
     std_iterator,
-    // ConcurrentPulseMap (single-lock)
+    // ConcurrentPulseMap (bucket locks + shared metadata/pool locks)
     concurrent_insert_1t_100k,
     concurrent_insert_4t_100k,
     concurrent_lookup_4t_100k,

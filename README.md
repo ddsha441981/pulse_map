@@ -136,6 +136,22 @@ Historical v0.6.2 headline speed/memory rankings are superseded by versioned res
 some old harnesses used rounded, unequal capacities and nominal-entry denominators.
 Correctness fixes can add overhead; the candidate is not universally faster.
 
+**Current paired capture:** [full report](evaluation/results/t05-full/report.md),
+65,536 nominal slots, three seeds, all trials included. Deterministic hits/residents
+match v0.6.5 on all 63 paired hit-rate rows; the larger-shard fix raises residency
+from 821,839 to 967,051 on the separate 1M-key boundary probe.
+
+| Trace, u64/u64 | Candidate typed hit rate | LRU | QuickCache |
+|---|---:|---:|---:|
+| Zipf .99 | 73.26% | 71.69% | 74.57% |
+| Repeated 3×capacity scan | 23.05% | 0.00% | 30.29% |
+| Changing hot sets | 90.58% | 97.54% | 97.54% |
+
+Memory trade-off is visible: u32 sharded RSS measured **61.75 B/resident** vs
+baseline 48.12 and QuickCache 50.12; typed inline remained 40.04 B/resident.
+Four-thread u64 sharded throughput was **9.56–9.75 Mops/s** vs baseline
+10.52–11.03. Other timings had wider spread; the report retains every trial.
+
 ## Embedded / no_std
 
 ```toml

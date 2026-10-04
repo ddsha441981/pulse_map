@@ -33,3 +33,22 @@ cargo bench --bench benchmark -- 'conc_|sharded_'
 ```
 
 Capture labels must be new. See evaluation/README.md for workload and RSS limitations.
+
+## v0.6.6 correctness candidate
+
+[Full paired report](https://github.com/ddsha441981/pulse_map/blob/staging/v0.6.6/evaluation/results/t05-full/report.md)
+includes three-seed means/ranges and all raw observations. At 65,536 slots and 2M
+cache-aside operations, candidate TypedPulseMap hit rate was 73.26% on Zipf .99,
+23.05% on a repeated 3×capacity scan, and 90.58% on changing hot sets; LRU measured
+71.69%, 0%, and 97.54% respectively. Scan resistance and adaptation are distinct.
+
+All 63 paired deterministic hit-rate rows match v0.6.5. The separate large-shard
+probe retains 967,051 of 1M keys vs 821,839 before the routing fix. The buffer fix
+costs 48 KiB/Concurrent map on x86_64 (768 KiB over 16 shards). Measured u32 sharded
+RSS was 61.75 B/resident vs 48.12 before; QuickCache was 50.12. Inline typed remained
+40.04 B/resident. RSS includes allocator/page effects; the queue allocation increase
+is structural.
+
+Four-thread u64 sharded throughput was 9.56–9.75 Mops/s vs 10.52–11.03 for v0.6.5.
+This is a measured correctness/performance cost, not a speedup release. Several
+other timing rows show substantial host variance; no universal ranking follows.
