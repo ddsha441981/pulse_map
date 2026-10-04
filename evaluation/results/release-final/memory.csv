@@ -1,0 +1,20 @@
+# baseline=registry:0.6.5 candidate=path:.. capacity=65536 ops=2000000 trials=3
+kind,cache,type,capacity,resident,base_kib,empty_kib,filled_kib,bytes_per_slot,bytes_per_resident
+memory,baseline-typed,u32,65536,52685,2504,4564,4564,32.19,40.04
+memory,candidate-typed,u32,65536,52685,2620,4680,4680,32.19,40.04
+memory,baseline-concurrent,u32,65536,52685,2648,4744,4808,33.75,41.98
+memory,candidate-concurrent,u32,65536,52685,2664,4808,4808,33.50,41.67
+memory,baseline-sharded,u32,65536,52602,2664,4996,5048,37.25,46.41
+memory,candidate-sharded,u32,65536,52602,2672,5772,5772,48.44,60.35
+memory,lru,u32,65536,65536,2692,2896,6984,67.06,67.06
+memory,quick,u32,65536,64976,2652,2732,5772,48.75,49.17
+memory,moka,u32,65536,65536,2596,4888,23388,324.88,324.88
+memory,baseline-typed,u64,65536,52795,2568,4628,8340,90.19,111.95
+memory,candidate-typed,u64,65536,52795,2500,4560,8272,90.19,111.95
+memory,baseline-concurrent,u64,65536,52795,2504,4600,8376,91.75,113.89
+memory,candidate-concurrent,u64,65536,52795,2664,4808,8520,91.50,113.58
+memory,baseline-sharded,u64,65536,52769,2688,5024,8864,96.50,119.85
+memory,candidate-sharded,u64,65536,52769,2620,5724,9500,107.50,133.51
+memory,lru,u64,65536,65536,2664,2868,7980,83.06,83.06
+memory,quick,u64,65536,65077,2644,2728,7328,73.19,73.70
+memory,moka,u64,65536,65536,2648,4940,23396,324.19,324.19

@@ -97,6 +97,8 @@ jobs:
       # --lib skips doc-tests: they re-run the same code paths at roughly the same cost.
       - name: Run Miri (std, concurrent + sharded)
         run: cargo miri test -p pulse_map --lib
+      - name: Run Miri (resize and shard-growth regressions)
+        run: cargo miri test -p pulse_map --test resize_regressions --test shard_growth
 
   # ═══════════════════════════════════════════════════════════
   # loom (concurrency interleavings in atomic code)

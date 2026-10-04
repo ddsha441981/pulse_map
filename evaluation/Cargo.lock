@@ -375,6 +375,8 @@ dependencies = [
 [[package]]
 name = "pulse_map"
 version = "0.6.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3ccf7f4306c2979b327bab9437089f8293412700598872742ffca00952487471"
 dependencies = [
  "loom",
  "portable-atomic",
@@ -383,9 +385,7 @@ dependencies = [
 
 [[package]]
 name = "pulse_map"
-version = "0.6.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3ccf7f4306c2979b327bab9437089f8293412700598872742ffca00952487471"
+version = "0.6.6"
 dependencies = [
  "loom",
  "portable-atomic",
@@ -399,7 +399,7 @@ dependencies = [
  "lru",
  "moka",
  "pulse_map 0.6.5",
- "pulse_map 0.6.5 (registry+https://github.com/rust-lang/crates.io-index)",
+ "pulse_map 0.6.6",
  "quick_cache",
  "rand",
  "rand_distr",

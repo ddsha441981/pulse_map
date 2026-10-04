@@ -69,6 +69,8 @@ Old root examples are exploratory; this pinned suite supplies published comparis
 
 ## Current evidence
 
+- [Final v0.6.6 capture](results/release-final/report.md) and
+  [complete local validation](FINAL_VALIDATION.md).
 - [Full T05 report](results/t05-full/report.md), [raw CSV/provenance](results/t05-full/).
 - [Before](results/before/) and [first correctness capture](results/after-correctness/)
   are preserved, including slower candidate measurements.

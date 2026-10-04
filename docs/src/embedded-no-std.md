@@ -90,14 +90,15 @@ The test inserts, gets, evicts, checks TTL, and removes — all on real ARM
 instructions, not a compile check. Output:
 
 ```text
-qemu-test: 16 buckets, 64 nominal slots, 3072 heap bytes used
+alloc: inline u32->u32 = 2 at new(), 0 across 256 insert+get+remove
+alloc: slab u64->u64   = 2 at new(), 14 across 6 inserts
+qemu-test: 16 buckets, 64 nominal slots, 4592 heap bytes used
 qemu-test: all checks passed
 ```
 
-The 3,072 covers **all three maps the test creates** — the 16-bucket main
-map (2,048 B) plus two 4-bucket maps for the TTL and remove checks
-(512 B each): 24 buckets × 128 B. A lone 16-bucket map is 2 KiB, matching
-the table above.
+The 4,592 covers **all five maps and slab allocations in the test**, including the
+added inline/slab allocation probes. It is not one map's footprint. A lone 16-bucket
+inline map is 2 KiB, matching the table above. Older three-map output reported 3,072 B.
 
 ## PulseMap vs LRU on Embedded
 

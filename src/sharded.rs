@@ -241,8 +241,8 @@ mod tests {
 
     #[test]
     // Skipped under Miri: 16 shards × 16384 buckets = 16 MB of tracked allocation, measured at
-    // >17 min and 2.2 GB RSS without finishing. test_sharded_resize_all (1024/shard) exercises
-    // the same insert+get path at 1/16 the size.
+    // >17 min and 2.2 GB RSS without finishing. test_sharded_resize_all exercises
+    // the same insert+get path at a smaller interpreter-friendly size.
     #[cfg_attr(miri, ignore)]
     fn test_sharded_basic_insert_get() {
         // 16384 buckets/shard → 65K slots/shard. 1000 keys / 16 shards ≈ 62/shard = 0.1% load.
@@ -285,16 +285,18 @@ mod tests {
 
     #[test]
     fn test_sharded_resize_all() {
-        // Start with 1024 buckets/shard (safe for 500 keys), resize to 2048.
-        let map = ShardedPulseMap::<u32, u32>::new(1024);
-        for i in 0u32..500 {
+        // Same migration/value assertions at both sizes; normal tests keep the
+        // original 1024→2048 bucket geometry, Miri avoids giant tracked arrays.
+        let (buckets, entries) = if cfg!(miri) { (4, 16) } else { (1024, 500) };
+        let map = ShardedPulseMap::<u32, u32>::new(buckets);
+        for i in 0..entries {
             map.insert(i, i);
         }
         let before = map.capacity();
-        map.resize_all(2048);
+        map.resize_all(buckets * 2);
         assert!(map.capacity() > before);
         // All entries survive the rehash
-        for i in 0u32..500 {
+        for i in 0..entries {
             assert_eq!(map.get(&i), Some(i));
         }
     }

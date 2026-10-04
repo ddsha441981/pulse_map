@@ -2,7 +2,20 @@
 
 See the full [CHANGELOG.md](https://github.com/ddsha441981/pulse_map/blob/main/CHANGELOG.md) in the repository root.
 
-## Unreleased (v0.6.5)
+## Unreleased (v0.6.6)
+
+- Preserve empty keys/TTL during resize; independent shard/bucket hash bits above
+  the old growth boundary; sequence-tagged access events prevent overlapping-wrap
+  duplicate delivery.
+- Precise TTL/occupancy/locking/allocation documentation and executable guide examples.
+- Pinned, paired in-repo evaluation with fair capacities, isolated memory and full
+  timing spread. Correctness costs +48 KiB per Concurrent map on x86_64 and measurable
+  throughput overhead on some traces; see [Benchmarks](benchmarks.md).
+
+Historical wording below describes old releases, not the current locking contract.
+Concurrent reads take locks; TTL's never-expire sentinel is `u64::MAX`.
+
+## v0.6.5 (2026-09-28)
 
 ### 🧠 AccessBuffer Drain + Validation & Embedded Proofs
 

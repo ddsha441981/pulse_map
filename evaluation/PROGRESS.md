@@ -101,3 +101,15 @@ The repeat capture confirms lower 4T u64 sharded throughput (9.56–9.75 vs
 10.52–11.03 Mops/s); some other rows vary widely. Both capture sessions are kept;
 correctness fixes are accepted with disclosed overhead, with queue optimization
 left for measured follow-up rather than claiming a universal improvement.
+
+## T06 — final local release preparation
+
+Manifest and evaluation lockfile now resolve v0.6.6; changelog lists the three
+fixes, semantic corrections and measured overhead. Stable/nightly core tests,
+no_std, fmt/Clippy, strict docs, Loom, complete Miri coverage at documented sizes,
+MSRV, eight embedded target checks, both QEMU targets and packaged guide examples
+pass. Package dry-run succeeds without upload. A fresh full capture after the
+version bump again verifies paired deterministic parity: `results/release-final/`.
+
+See [FINAL_VALIDATION.md](FINAL_VALIDATION.md) for exact commands, counts, Miri
+timeout/scaling rationale, QEMU footprint numbers and remote-CI/publication status.

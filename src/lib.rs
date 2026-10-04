@@ -886,7 +886,7 @@ mod tests {
     #[cfg(feature = "std")]
     #[test]
     // Skipped under Miri: 16384 buckets with 4 × 1000 threaded inserts is the largest case in
-    // the suite; test_concurrent_multithread_read_write (4096) covers the same threaded path.
+    // the suite; the scaled test_concurrent_multithread_read_write covers the threaded path.
     #[cfg_attr(miri, ignore)]
     fn test_concurrent_multithread_insert() {
         use std::sync::Arc;
@@ -914,13 +914,21 @@ mod tests {
     #[cfg(feature = "std")]
     #[test]
     fn test_concurrent_multithread_read_write() {
-        use std::sync::Arc;
+        use std::sync::{Arc, Barrier};
         use std::thread;
 
-        let map = Arc::new(ConcurrentPulseMap::<u32, u32>::new(4096));
+        // The production-scale case exceeded 20 minutes under Miri. Keep the same
+        // four-thread read/write paths and value oracle with a smaller workload.
+        let (buckets, entries, ops) = if cfg!(miri) {
+            (64, 16, 32)
+        } else {
+            (4096, 500, 500)
+        };
+        let map = Arc::new(ConcurrentPulseMap::<u32, u32>::new(buckets));
+        let barrier = Arc::new(Barrier::new(4));
 
         // Pre-fill
-        for i in 0..500u32 {
+        for i in 0..entries {
             map.insert(i, i * 10);
         }
 
@@ -928,12 +936,17 @@ mod tests {
         let handles: Vec<_> = (0..4)
             .map(|t| {
                 let m = map.clone();
+                let barrier = barrier.clone();
                 thread::spawn(move || {
-                    for i in 0..500u32 {
+                    barrier.wait();
+                    for i in 0..ops {
                         if t % 2 == 0 {
-                            m.insert(500 + t * 1000 + i, i);
+                            m.insert(entries + t * 1000 + i, i);
                         } else {
-                            let _ = m.get(&(i % 500));
+                            let key = i % entries;
+                            if let Some(value) = m.get(&key) {
+                                assert_eq!(value, key * 10);
+                            }
                         }
                     }
                 })
