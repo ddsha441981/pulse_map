@@ -18,3 +18,21 @@ finite TTL, never-expire TTL, auto-resize and sharded resize. Removed the empty-
 skip: occupancy is established by Full state, not key length.
 All seven pass after the fix, including Miri (22 seconds). Full all-features/no_std
 tests and Clippy passed; formatting checked. No policy change was required.
+
+## T02 — shard routing across growth
+
+Added a shard-only bucket-index compaction that removes routing bits 14..17.
+Existing maps at <=16,384 buckets/shard keep their distribution; growth uses the
+next independent hash bit. All lookup/write/rehash paths use the same derivation.
+The boundary regression failed before the fix and passes afterwards:
+
+| Buckets/shard | Before residents | After residents (1M distinct inputs) |
+|---:|---:|---:|
+| 8,192 | 514,096 | 514,096 |
+| 16,384 | 821,839 | 821,839 |
+| 32,768 | 821,839 | 967,051 |
+
+Synthetic routing/H2 independence through 32-bit masks, auto-growth TTL, inline/slab
+resident preservation and concurrent growth checks passed. Small tests passed Miri;
+the large allocation probe is ignored only under Miri. All-features (60 unit +
+10 integration + 11 doc), formatting and Clippy passed.

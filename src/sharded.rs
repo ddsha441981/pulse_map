@@ -29,6 +29,15 @@ use crate::{PulseKey, PulseValue};
 /// Number of independent shards. Same as dashmap's default sweet spot.
 const NUM_SHARDS: usize = 16;
 
+/// Compact the hash around shard bits 14..17. Low 14 bits stay unchanged so
+/// existing small maps keep their distribution. Growth uses bit 18 next, never
+/// a bit fixed by shard identity. H2 still uses the original hash's top 7 bits.
+#[inline]
+pub(crate) fn bucket_hash(hash: u64) -> u64 {
+    const LOW: u64 = (1 << 14) - 1;
+    (hash & LOW) | ((hash >> 4) & !LOW)
+}
+
 /// Thread-safe PulseMap sharded across 16 independent [`ConcurrentPulseMap`]s.
 ///
 /// - Different keys hash to different shards → no cross-shard contention.
@@ -49,7 +58,7 @@ impl<K: PulseKey, V: PulseValue> ShardedPulseMap<K, V> {
     pub fn new(buckets_per_shard: usize) -> Self {
         Self {
             shards: Box::new(core::array::from_fn(|_| {
-                ConcurrentPulseMap::new(buckets_per_shard)
+                ConcurrentPulseMap::new_shard(buckets_per_shard, false)
             })),
         }
     }
@@ -58,7 +67,7 @@ impl<K: PulseKey, V: PulseValue> ShardedPulseMap<K, V> {
     pub fn with_auto_resize(buckets_per_shard: usize) -> Self {
         Self {
             shards: Box::new(core::array::from_fn(|_| {
-                ConcurrentPulseMap::with_auto_resize(buckets_per_shard)
+                ConcurrentPulseMap::new_shard(buckets_per_shard, true)
             })),
         }
     }
@@ -67,7 +76,7 @@ impl<K: PulseKey, V: PulseValue> ShardedPulseMap<K, V> {
     ///
     /// Uses bits 14-17 of the hash to avoid overlapping with:
     ///   - `h2` fingerprint (bits 57-63) — preserves full 7-bit entropy
-    ///   - bucket_mask (low bits 0-N) — avoids clustering within shards
+    ///   - bucket indexing, which removes these bits via `bucket_hash`
     #[inline]
     fn shard_for(key_bytes: &[u8]) -> usize {
         (compute_hash(key_bytes).h1 >> 14) as usize & (NUM_SHARDS - 1)
@@ -184,6 +193,51 @@ mod tests {
     use super::*;
     use std::sync::Arc;
     use std::thread;
+
+    #[test]
+    fn routing_bits_are_removed_at_every_bucket_mask() {
+        // No large allocations: construct hashes that reach both halves of each
+        // index bit through 32-bit bucket masks, independently in all 16 shards.
+        for bits in [8, 14, 15, 16, 18, 24, 32] {
+            let mask = (1u64 << bits) - 1;
+            for index in [0, 1, mask / 2, mask / 2 + 1, mask] {
+                for shard in 0..16u64 {
+                    let low = index & ((1 << 14) - 1);
+                    let high = (index & !((1 << 14) - 1)) << 4;
+                    for h2 in [0, 1, 63, 127] {
+                        let hash = low | high | (shard << 14) | (h2 << 57);
+                        assert_eq!((hash >> 14) & 15, shard);
+                        assert_eq!(bucket_hash(hash) & mask, index);
+                        assert_eq!(hash >> 57, h2);
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn shard_auto_growth_preserves_ttl_and_resident_keys() {
+        let map = ShardedPulseMap::<u32, u32>::with_auto_resize(1);
+        // Four keys in one shard fill its lone bucket without eviction.
+        let keys: Vec<u32> = (0..1000u32)
+            .filter(|k| ShardedPulseMap::<u32, u32>::shard_for(&k.to_le_bytes()) == 0)
+            .take(4)
+            .collect();
+        assert_eq!(keys.len(), 4);
+        map.insert_ttl(keys[0], 10, 4);
+        for &key in &keys[1..] {
+            map.insert_ttl(key, key, u64::MAX);
+        }
+        let before = map.capacity();
+        map.insert_ttl(keys[1], keys[1], u64::MAX); // triggers growth, age = 4
+        assert!(map.capacity() > before);
+        assert_eq!(map.peek(&keys[0]), Some(10));
+        map.insert_ttl(keys[1], keys[1], u64::MAX); // age = 5
+        assert_eq!(map.peek(&keys[0]), None);
+        for &key in &keys[1..] {
+            assert_eq!(map.get(&key), Some(key));
+        }
+    }
 
     #[test]
     // Skipped under Miri: 16 shards × 16384 buckets = 16 MB of tracked allocation, measured at
