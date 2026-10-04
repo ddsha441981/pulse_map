@@ -91,8 +91,8 @@ impl<K: PulseKey, V: PulseValue> ShardedPulseMap<K, V> {
     /// Thread-safe insert with a per-entry TTL override.
     ///
     /// - `ttl = 0`: use the map's default TTL
-    /// - `ttl = u64::MAX`: this entry never expires
-    /// - `ttl = N`: this entry expires after N insertions
+    /// - `ttl = u64::MAX`: no expiry (capacity eviction still applies)
+    /// - `ttl = N`: expires when insertion age in its shard is greater than N
     pub fn insert_ttl(&self, key: K, value: V, ttl: u64) {
         let idx = key.with_key_bytes(Self::shard_for);
         self.shards[idx].insert_ttl(key, value, ttl);
@@ -134,8 +134,8 @@ impl<K: PulseKey, V: PulseValue> ShardedPulseMap<K, V> {
 
     /// Set TTL (in insertion epochs) on every shard. 0 = disabled.
     ///
-    /// Each shard counts its own epochs, so an entry expires after `ttl`
-    /// inserts landing in ITS shard (~`ttl × 16` inserts map-wide).
+    /// Each shard counts its own epochs. An entry expires when more than `ttl`
+    /// later inserts land in ITS shard, not after a fixed map-wide count or time.
     pub fn set_ttl(&self, ttl: u64) {
         for shard in self.shards.iter() {
             shard.set_ttl(ttl);
@@ -157,12 +157,12 @@ impl<K: PulseKey, V: PulseValue> ShardedPulseMap<K, V> {
             .unwrap_or(0)
     }
 
-    /// Total live entries across all shards.
+    /// Total occupied slots, including expired entries. Not a globally atomic snapshot.
     pub fn len(&self) -> usize {
         self.shards.iter().map(|s| s.len()).sum()
     }
 
-    /// Returns true if no shard holds any entry.
+    /// Returns true if no shard holds any occupied slot, including expired entries.
     pub fn is_empty(&self) -> bool {
         self.shards.iter().all(|s| s.is_empty())
     }
@@ -172,7 +172,7 @@ impl<K: PulseKey, V: PulseValue> ShardedPulseMap<K, V> {
         self.shards.iter().map(|s| s.capacity()).sum()
     }
 
-    /// Map-wide load factor.
+    /// Map-wide occupied-slot load factor, including expired entries.
     pub fn load_factor(&self) -> f64 {
         let cap = self.capacity();
         if cap == 0 {

@@ -59,3 +59,17 @@ by 48 KiB per Concurrent map / 768 KiB across 16 shards. Typed/no_std memory is
 unchanged. Sharded u32 throughput was lower in this session (e.g. four-thread
 candidate 9.397–9.841 vs baseline 10.418–12.143 Mops/s); noisy data is retained in
 full. This is a correctness release, not a universal speed/memory improvement.
+
+## T04 — public documentation and executable guide
+
+README, mdBook and public rustdoc now agree on occupied vs unexpired counts,
+iterator inclusion, strict `age > ttl`, per-shard epochs, raw/concurrent reclamation,
+inline/slab allocation and actual read locks. Removed nonexistent API examples,
+u32 TTL sentinels, non-atomic rate-limiter examples, unsupported timing rankings,
+and claims that host/QEMU timing establishes physical-MCU performance. Bindings
+are correctly linked to their independently versioned C/Python/Java/Node project.
+
+`src/guide_doctests.rs` includes the actual README and every guide page for rustdoc
+testing. All 25 executable examples pass, including lazy TTL occupancy assertions.
+Strict all-features rustdoc and `mdbook build` pass without warnings. Historical
+brain index dated locally; new result tables follow in T05.

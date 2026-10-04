@@ -131,8 +131,9 @@ impl MapInner {
 /// Thread-safe PulseMap with per-bucket locking and optional dynamic resize.
 ///
 /// - All methods take `&self` (not `&mut self`) — safe to share via `Arc`.
-/// - Different buckets are accessed fully in parallel.
+/// - Different buckets can overlap, but share epochs and slab mutexes.
 /// - Same bucket: serialized via spinlock (fast for short critical sections).
+/// - Get/peek take the bucket lock; a hit takes the epochs mutex even without TTL.
 /// - Resize: stop-the-world (write lock blocks all ops during rehash).
 ///
 /// # Example
@@ -285,8 +286,8 @@ impl<K: PulseKey, V: PulseValue> ConcurrentPulseMap<K, V> {
     /// Thread-safe insert with a per-entry TTL override.
     ///
     /// - `ttl = 0`: use the map's default TTL
-    /// - `ttl = u64::MAX`: this entry never expires
-    /// - `ttl = N`: this entry expires after N insertions
+    /// - `ttl = u64::MAX`: no expiry (capacity eviction still applies)
+    /// - `ttl = N`: expires when insertion age is greater than N
     pub fn insert_ttl(&self, key: K, value: V, ttl: u64) {
         self.insert_internal(key, value, ttl);
     }
@@ -567,7 +568,7 @@ impl<K: PulseKey, V: PulseValue> ConcurrentPulseMap<K, V> {
         // approximate policy hints while no reader/writer can enqueue more.
         self.access_buffer.clear();
 
-        // Collect all live entries with their TTL data before rehashing.
+        // Collect all occupied entries, including expired ones, with TTL data.
         // This decouples extraction from insertion so we can retry with a
         // larger capacity if bucket collisions cause overflow.
         struct EntryData {
@@ -669,11 +670,14 @@ impl<K: PulseKey, V: PulseValue> ConcurrentPulseMap<K, V> {
 
     // ── Stats ──
 
+    /// Number of occupied slots, including expired-but-unreclaimed entries.
+    /// This counter is not a consistent snapshot of concurrent operations.
     #[inline]
     pub fn len(&self) -> usize {
         self.count.load(Ordering::Relaxed)
     }
 
+    /// True when no slots are occupied, including expired entries.
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
@@ -685,6 +689,7 @@ impl<K: PulseKey, V: PulseValue> ConcurrentPulseMap<K, V> {
         state.num_buckets * 4
     }
 
+    /// Occupied slots divided by nominal capacity, including expired entries.
     #[inline]
     pub fn load_factor(&self) -> f64 {
         let cap = self.capacity();

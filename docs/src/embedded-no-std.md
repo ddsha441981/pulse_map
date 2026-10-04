@@ -51,11 +51,11 @@ interrupts around the update.
 
 The critical-section **implementation** comes from your HAL, not from PulseMap:
 
-```rust
-// Cortex-M0 / RP2040 — add to your binary crate
+```toml
+# Cortex-M0 single-core — add to your binary crate
 cortex-m = { version = "0.7", features = ["critical-section-single-core"] }
 
-// ESP32-C3
+# ESP32-C3: use your HAL's supported critical-section implementation
 esp-hal = { version = "...", features = ["critical-section"] }
 ```
 
@@ -89,7 +89,7 @@ Requires `qemu-system-arm` installed (`apt install qemu-system-arm`).
 The test inserts, gets, evicts, checks TTL, and removes — all on real ARM
 instructions, not a compile check. Output:
 
-```
+```text
 qemu-test: 16 buckets, 64 nominal slots, 3072 heap bytes used
 qemu-test: all checks passed
 ```
@@ -101,15 +101,17 @@ the table above.
 
 ## PulseMap vs LRU on Embedded
 
-In `no_std`, the only other option is `lru`. Here's why PulseMap wins:
+`qemu-test/` compares PulseMap against `lru` 0.12, one no_std-compatible competitor;
+other no_std caches exist. At 64 resident inline u32/u32 entries, the historical
+probe measured 2,048 B heap for PulseMap and 4,520 B for LRU. It chooses keys that
+fill all slots, rather than assuming nominal capacity equals residency.
 
-| | PulseMap | lru |
-|---|---|---|
-| Memory per entry | **34 B** (at scale) | 68 B |
-| Eviction policy | LFU + LRU (smart) | Pure LRU |
-| Cache-line aligned | ✅ 64-byte buckets | ❌ pointer chasing |
-| Hit rate (Zipfian) | **96.73%** | 95.83% |
-| Allocation pattern | Upfront, predictable | Per-insert, fragmented |
+This does not imply the same hit rate on arbitrary keys. Bucket-local eviction
+can discard entries before global capacity is full. Numeric u64 payloads use slab
+storage and change allocation behaviour. Flash comparisons are toolchain-specific;
+the measured M3 build favoured LRU's smaller code size.
 
-On memory-constrained MCUs, PulseMap stores **2x more entries** in the same
-RAM, with a better eviction policy.
+MetaWord uses AtomicU64 even in raw/typed get. On Cortex-M0 the fallback can mask
+interrupts. QEMU validates instructions, results and allocations, not real-time
+latency. A multicore chip needs a cross-core-safe critical-section implementation;
+single-core interrupt masking alone is insufficient across cores.

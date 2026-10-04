@@ -1,158 +1,57 @@
 # Use Cases
 
-> **💡 Use PulseMap anywhere you'd use HashMap but can't afford unbounded memory growth.**
+## Compact memoization
 
-## DNS Cache
-
-```rust
-use pulse_map::ShardedPulseMap;
-
-let dns_cache = ShardedPulseMap::<String, String>::new(65536);
-
-// Hot domains stay, cold domains auto-evict
-dns_cache.insert("google.com".to_string(), "142.250.80.46".to_string());
-
-// Bounded memory — won't OOM on millions of unique queries
-println!("Evictions: {}", dns_cache.eviction_count());
-```
-
-**Why PulseMap:** ISPs see millions of unique domains. HashMap grows forever → OOM. ShardedPulseMap keeps the hottest records in fixed memory, with 6.5–12x better throughput than moka under concurrent load.
-
----
-
-## API Rate Limiter with TTL
+Use a typed cache when recomputing a missing result is acceptable. u32/u32 stays
+inline and does not allocate during insert/get/remove after map construction.
 
 ```rust
-use pulse_map::ShardedPulseMap;
-use std::sync::Arc;
-
-let rate_limiter = Arc::new(ShardedPulseMap::<String, u64>::with_auto_resize(4096));
-rate_limiter.set_ttl(100_000); // reset counts after 100K inserts
-
-fn check_rate(limiter: &ShardedPulseMap<String, u64>, ip: &str) -> bool {
-    let key = ip.to_string();
-    let count = limiter.get(&key).unwrap_or(0);
-    if count >= 100 {
-        return false;  // rate limited
-    }
-    limiter.insert(key, count + 1);
-    true
+use pulse_map::TypedPulseMap;
+fn squared(cache: &mut TypedPulseMap<u32,u32>, key: u32) -> u32 {
+    if let Some(value) = cache.get(&key) { return value; }
+    let value = key.saturating_mul(key);
+    cache.insert(key, value);
+    value
 }
+let mut cache = TypedPulseMap::new(16);
+assert_eq!(squared(&mut cache, 7), 49);
 ```
 
-**Why PulseMap:** Per-IP counters in bounded memory. Old IPs auto-evict. Per-entry TTL lets short-burst IPs reset faster.
-
----
-
-## CDN Edge Cache
+## Shared cache-aside data
 
 ```rust
 use pulse_map::ShardedPulseMap;
-
-let edge_cache = ShardedPulseMap::<String, Vec<u8>>::new(16384);
-
-// Serve from cache — ~5ns lookup on cache hit
-if let Some(content) = edge_cache.get(&url) {
-    return content;
+fn cached_query(
+    cache: &ShardedPulseMap<String,String>, key: String,
+    fetch: impl FnOnce(&str) -> String,
+) -> String {
+    if let Some(value) = cache.get(&key) { return value; }
+    let value = fetch(&key);
+    cache.insert(key, value.clone());
+    value
 }
-
-// Cache miss — fetch from origin
-let content = fetch_origin(&url);
-edge_cache.insert(url, content);
+let cache = ShardedPulseMap::new(16);
+assert_eq!(cached_query(&cache, "query".into(), |_| "result".into()), "result");
 ```
 
-**Why PulseMap:** Hot content stays in L1 (64-byte cache line). Cold content evicts automatically. No GC pauses — critical for sub-millisecond edge latency.
+Concurrent misses may call fetch more than once. This does not provide request
+coalescing, an atomic read-modify-write, or a wall-clock freshness guarantee.
+String values use the slab and owned return values allocate.
 
----
+## Embedded sample cache
 
-## Session Store with Per-Entry TTL
+Small numeric sensor IDs and derived values are a good inline fit. Size the bucket
+and TTL allocations together and test collision pressure. See the embedded guide
+for QEMU allocation/footprint measurements; host timings do not establish ISR bounds.
 
-```rust
-use pulse_map::ShardedPulseMap;
+## Boundaries to account for
 
-let sessions = ShardedPulseMap::<String, String>::with_auto_resize(8192);
-sessions.set_ttl(500_000); // global default: 500K inserts
+- DNS/session lifetimes need actual time-based validation outside epoch TTL.
+- A concurrent get/increment/insert rate limiter can lose updates, refreshes TTL
+  on each insert, and may forget counts through eviction.
+- Caching a numeric GPU handle does not release its external resource on eviction.
+- Deduplication is best-effort unless your application provides atomic coordination.
+- Fixed entry count does not cap bytes for arbitrarily large content.
 
-// Premium users: longer TTL
-sessions.insert_ttl("premium:abc".to_string(), user_json, 2_000_000);
-
-// Regular users: global default
-sessions.insert("user:xyz".to_string(), user_json);
-
-// Admin tokens: never expire
-sessions.insert_ttl("admin:root".to_string(), token, u32::MAX);
-```
-
-**Why PulseMap:** Per-entry TTL means different session policies without needing a separate cache per tier. No background cleanup thread needed.
-
----
-
-## Game Asset Cache
-
-```rust
-use pulse_map::ShardedPulseMap;
-
-let texture_cache = ShardedPulseMap::<String, u64>::new(2048);
-
-// Cache texture GPU handles — fixed VRAM budget
-texture_cache.insert("hero_idle.png".to_string(), gpu_handle);
-
-// When full, least-used textures auto-evict
-println!("Evictions: {}", texture_cache.eviction_count());
-```
-
-**Why PulseMap:** Fixed memory = no frame drops from GC. Eviction metadata embedded in cache line = zero extra cost.
-
----
-
-## Log Deduplication
-
-```rust
-use pulse_map::ConcurrentPulseMap;
-
-let seen_logs = ConcurrentPulseMap::<u64, u8>::new(32768);
-
-fn should_log(seen: &ConcurrentPulseMap<u64, u8>, hash: u64) -> bool {
-    if seen.contains_key(&hash) {
-        return false;  // duplicate — skip
-    }
-    seen.insert(hash, 1);
-    true
-}
-```
-
-**Why PulseMap:** Dedup window is bounded. Old hashes auto-evict. Zero allocations during hot path.
-
----
-
-## Database Query Cache
-
-```rust
-use pulse_map::ShardedPulseMap;
-
-let query_cache = ShardedPulseMap::<String, String>::new(4096);
-
-fn cached_query(cache: &ShardedPulseMap<String, String>, sql: &str) -> String {
-    let key = sql.to_string();
-    if let Some(result) = cache.get(&key) {
-        return result;  // cache hit — ~5ns
-    }
-    let result = execute_sql(sql);  // cache miss — ~1ms
-    cache.insert(key, result.clone());
-    result
-}
-```
-
-**Why PulseMap:** Hot queries stay cached. Cold queries evict. 8-thread query dispatchers benefit from ShardedPulseMap's near-zero lock contention.
-
----
-
-## Choosing the Right Map per Use Case
-
-| Use Case | Recommended | Reason |
-|----------|:-----------:|--------|
-| DNS cache (multi-core) | `ShardedPulseMap` | High concurrent insert rate |
-| Rate limiter (API server) | `ShardedPulseMap` | Per-IP TTL + concurrent access |
-| Single-thread parser | `TypedPulseMap` | No locking overhead |
-| Game assets | `ShardedPulseMap` | Multi-thread asset streaming |
-| FFI / C interop | `PulseMapRaw` | Raw byte API |
+These are cache semantics: choose application-level coordination and ownership
+according to the data being cached.

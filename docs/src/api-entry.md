@@ -1,51 +1,21 @@
 # Entry API
 
-The Entry API provides in-place access for complex insert-or-update patterns.
-
-## Usage
+TypedPulseMap provides occupied/vacant entries through an exclusive mutable borrow.
+Unlike std HashMap's entry API, `or_insert`/`or_insert_with` return unit, not `&mut V`.
 
 ```rust
 use pulse_map::TypedPulseMap;
-
-let mut map: TypedPulseMap<String, u64> = TypedPulseMap::new(256);
-
-// Insert-or-update pattern
-map.insert("counter".to_string(), 0);
-
-// Update existing value
-if let Some(old) = map.get(&"counter".to_string()) {
-    map.insert("counter".to_string(), old + 1);
-}
+let mut map = TypedPulseMap::<u32,u32>::new(16);
+map.entry(1).or_insert(10);
+map.entry(1).and_modify(|v| *v += 1).or_insert(0);
+assert_eq!(map.get(&1), Some(11));
+map.entry(2).or_insert_with(|| 20);
+assert_eq!(map.get(&2), Some(20));
 ```
 
-## Insert-or-Default
+OccupiedEntry exposes get/key/insert/remove; VacantEntry exposes key/insert.
+Writing a modified value re-inserts it, refreshing its epoch and using the default
+TTL. Entry lookup treats expired values as vacant.
 
-```rust
-// If key doesn't exist, insert default
-let key = "visits".to_string();
-if !map.contains_key(&key) {
-    map.insert(key.clone(), 0);
-}
-
-// Now safely increment
-if let Some(count) = map.get(&key) {
-    map.insert(key, count + 1);
-}
-```
-
-## Atomic Upsert Pattern (Concurrent)
-
-```rust
-use pulse_map::ConcurrentPulseMap;
-
-let map = ConcurrentPulseMap::<String, u64>::new(256);
-
-// Thread-safe upsert — insert always succeeds
-// If key exists, value is overwritten (last-writer-wins)
-map.insert("key".to_string(), 42);
-map.insert("key".to_string(), 99);  // overwrites
-
-assert_eq!(map.get(&"key".to_string()), Some(99));
-```
-
-> **Note:** PulseMap's `insert()` is an upsert — it inserts if the key is new, or updates if the key exists. There is no separate `update()` method.
+Concurrent/sharded maps offer upsert through insert, but no atomic read-modify-write
+entry API. A separate get followed by insert can lose concurrent updates.

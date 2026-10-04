@@ -22,7 +22,7 @@ cargo doc --no-deps     # No doc warnings
 
 ## Architecture
 
-```
+```text
 Layer 5: sharded.rs → ShardedPulseMap (16 shards)
 Layer 4: sync.rs    → ConcurrentPulseMap
 Layer 3: lib.rs     → User API (TypedPulseMap, PulseMap)
@@ -33,7 +33,7 @@ Layer 1: engine/    → MetaWord, Slot, Bucket, hash, slab
 ## Key Rules
 
 1. Every bucket = exactly 64 bytes
-2. Eviction is zero-cost (metadata in cache line)
+2. Eviction decisions reuse in-bucket metadata; additional TTL/slab accesses still cost work
 3. No heap allocation in hot path
 4. Thread safety via `&self` (no `&mut self` for CRUD)
 

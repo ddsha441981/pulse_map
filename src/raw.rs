@@ -136,8 +136,8 @@ impl PulseMapRaw {
     /// Insert with a per-entry TTL override.
     ///
     /// - `ttl = 0`: use the map's default TTL (`set_ttl()`)
-    /// - `ttl = u64::MAX`: this entry never expires
-    /// - `ttl = N`: this entry expires after N insertions
+    /// - `ttl = u64::MAX`: no expiry (capacity eviction still applies)
+    /// - `ttl = N`: expires when insertion age is greater than N
     pub fn insert_ttl(&mut self, key: &[u8], value: &[u8], ttl: u64) {
         self.insert_internal(key, value, ttl);
     }
@@ -313,11 +313,13 @@ impl PulseMapRaw {
         false
     }
 
+    /// Number of occupied slots, including expired-but-unreclaimed entries.
     #[inline]
     pub fn len(&self) -> usize {
         self.count
     }
 
+    /// True when no slots are occupied; expired slots still count as occupied.
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.count == 0
@@ -333,6 +335,7 @@ impl PulseMapRaw {
         self.num_buckets
     }
 
+    /// Occupied slots divided by nominal capacity, including expired entries.
     #[inline]
     pub fn load_factor(&self) -> f64 {
         self.count as f64 / self.capacity() as f64

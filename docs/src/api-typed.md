@@ -1,70 +1,27 @@
-# TypedPulseMap<K, V>
+# TypedPulseMap<K,V>
 
-Type-safe single-threaded map. Works with any type implementing `PulseKey` and `PulseValue`.
-
-## Construction
+A fixed-size wrapper around raw storage using PulseKey/PulseValue encodings.
+Lookups deserialize owned values. No `Index` or reference-to-V API is provided.
 
 ```rust
 use pulse_map::TypedPulseMap;
-
-// String → String cache
-let mut cache: TypedPulseMap<String, String> = TypedPulseMap::new(256);
-
-// u64 → u64 counter store
-let mut counters: TypedPulseMap<u64, u64> = TypedPulseMap::new(1024);
-
-// With auto-resize
-let mut cache: TypedPulseMap<String, Vec<u8>> = TypedPulseMap::with_auto_resize(64);
-```
-
-## CRUD Operations
-
-```rust
-// Insert (uses global TTL)
-cache.insert("session_abc".to_string(), "user_data_json".to_string());
-
-// Insert with per-entry TTL (v0.6.1+)
-cache.insert_ttl("session_abc".to_string(), "user_data".to_string(), 200);
-cache.insert_ttl("config".to_string(), "val".to_string(), u32::MAX);  // never expire
-
-// Get — returns owned Option<V>
-let val: Option<String> = cache.get(&"session_abc".to_string());
-
-// Peek — like get() but doesn't update eviction priority
-let val: Option<String> = cache.peek(&"session_abc".to_string());
-
-// Contains
-let exists: bool = cache.contains_key(&"session_abc".to_string());
-
-// Remove
-let removed: bool = cache.remove(&"session_abc".to_string());
-```
-
-## Numeric Keys
-
-```rust
-let mut map: TypedPulseMap<u32, u64> = TypedPulseMap::new(256);
-
+let mut map = TypedPulseMap::<u32, u64>::new(16);
 map.insert(42, 100);
-map.insert(1337, 9001);
-
 assert_eq!(map.get(&42), Some(100));
+assert!(map.contains_key(&42));
+map.extend([(1, 10), (2, 20)]);
+assert!(map.iter().any(|(k,v)| k == 42 && v == 100));
+assert!(map.remove(&42));
 ```
 
-## Stats
+This example's u64 value uses slab storage; choose u32/u32 for inline mode. Keys
+must fit 6 bytes and values 7 bytes to avoid slab allocation. Strings/Vec values
+also allocate when deserialized.
 
-```rust
-println!("Entries:     {}", cache.len());
-println!("Empty:       {}", cache.is_empty());
-println!("Capacity:    {}", cache.capacity());
-println!("Load Factor: {:.1}%", cache.load_factor() * 100.0);
-println!("Evictions:   {}", cache.eviction_count());
-println!("Buckets:     {}", cache.num_buckets());
-```
+Stats: len, is_empty, capacity, load_factor, eviction_count. There is no typed
+`num_buckets` or `with_auto_resize`. `iter()` includes expired occupied entries and
+skips values that fail custom deserialization. `contains_key()` tests raw presence
+with expiry, without decoding V.
 
-## Performance Tips
-
-1. **Use small keys** (≤ 6 bytes) when possible — they stay inline (no heap allocation)
-2. **Use small values** (≤ 7 bytes) when possible — same reason
-3. **Pre-size correctly** — avoid auto-resize overhead for known workloads
-4. **Use `peek()` for read-heavy** paths where you don't want to affect eviction priority
+`From<HashMap>` chooses a bucket count then inserts; collisions can evict entries
+during conversion. It is not a lossless HashMap conversion guarantee.

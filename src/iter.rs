@@ -10,6 +10,7 @@ use crate::raw::PulseMapRaw;
 use crate::{PulseKey, PulseValue, SlotState};
 
 /// Iterator over raw `(&[u8], &[u8])` key-value pairs in a PulseMapRaw.
+/// Includes expired occupied slots; does not update priority or filter by TTL.
 pub struct RawIter<'a> {
     map: &'a PulseMapRaw,
     bucket_idx: usize,
@@ -62,6 +63,7 @@ impl<'a> Iterator for RawIter<'a> {
 }
 
 /// Iterator over typed `(K, V)` pairs in a TypedPulseMap.
+/// Includes expired occupied slots; skips pairs that fail deserialization.
 pub struct TypedIter<'a, K: PulseKey, V: PulseValue> {
     raw_iter: RawIter<'a>,
     _marker: core::marker::PhantomData<(K, V)>,

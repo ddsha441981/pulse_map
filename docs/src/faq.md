@@ -1,126 +1,49 @@
 # FAQ
 
-## General
+### Is this a HashMap replacement?
 
-### Is PulseMap a HashMap replacement?
+It is a bounded **entry-count cache**, not a lossless map. A full four-slot bucket
+evicts locally before global capacity is reached. Slab payload sizes can grow memory
+usage even with fixed entry count. Optional auto-resize on concurrent maps removes
+the fixed-capacity bound.
 
-**No.** PulseMap is a **bounded cache** with automatic eviction. Use it when:
-- You need fixed memory usage
-- You can tolerate entries being evicted
-- You want in-process caching without Redis
+### Is every operation one cache miss or allocation-free?
 
-Use `HashMap` when you need to keep every entry forever.
+No. Bucket metadata is co-located with slots, but TTL and slab reads touch additional
+storage. Raw/typed inline operations avoid allocation after construction. Concurrent
+get/peek currently copy bytes into a temporary vector, even on inline hits.
 
-### What happens when PulseMap is full?
+### Is it faster than LRU, QuickCache, Moka or HashMap?
 
-The **least-useful entry** in the target bucket is evicted (LFU+LRU hybrid). This is automatic and costs zero additional cache misses. Check `eviction_count()` to monitor.
+Results depend on payload, occupancy, skew, hit rate and threads. HashMap has no
+eviction, so it is not an equivalent bounded-cache competitor. See the versioned
+[benchmarks](benchmarks.md) and compare actual resident counts as well as throughput.
 
-### Can I turn off eviction?
+### Does expiry remove entries immediately?
 
-Not directly, but you can minimize it:
-1. Use `with_auto_resize(n)` — the map doubles when 75% full
-2. Start with a large initial size
-3. Monitor `eviction_count()` — if it's 0, you're fine
+No. Get/peek hide expired entries, while len and iter still count/include their
+occupied slots. TTL counts inserts, not wall-clock time. `u64::MAX` disables expiry
+for an entry but does not protect it from eviction.
 
-### What's the maximum key/value size?
+### Can I call it from async code?
 
-- **Inline mode:** key ≤ 6 bytes, value ≤ 7 bytes (fastest, zero allocation)
-- **Slab mode:** unlimited size (heap allocated)
+Yes, as a synchronous operation that can block on locks and allocation. Reads use
+RwLock, bucket spinlock, and shared metadata/pool mutexes. A get followed by insert
+is not an atomic counter update. See [Concurrency](concurrency.md).
 
-Both modes are transparent — PulseMap automatically chooses the optimal storage.
+### Does sharding remove same-key contention?
 
----
+No. A key always maps to one shard and bucket. Sharding spreads unrelated keys;
+hot single-key traffic still contends. Resizing blocks the affected shard.
 
-## Performance
+### How much memory should I allocate?
 
-### Why is PulseMap faster than HashMap?
+Raw/typed: 128 B/bucket for bucket + TTL records, plus payload slab/allocator costs.
+Concurrent/sharded add locks and an access queue per map/shard. Inline key ≤6 bytes
+AND value ≤7 bytes. See [Embedded](embedded-no-std.md) and the measured RSS tables.
 
-Three reasons:
-1. **Cache efficiency:** 1 cache line per lookup (vs 2-3 for HashMap)
-2. **No pointer chasing:** Inline mode stores data directly in the bucket
-3. **H2 fingerprint:** 99.2% of non-matches rejected without key comparison
+### Are no_std and bindings supported?
 
-### When is PulseMap slower?
-
-- **Iteration** — PulseMap doesn't maintain insertion order
-- **Very large values** — Slab allocation adds overhead
-- **99%+ fill rate** — Every insert causes an eviction
-
-### How does it compare to moka?
-
-**Single-thread:** moka is significantly slower (161ms vs 6.1ms for 100K inserts). moka uses background maintenance threads and heavy synchronization.
-
-**Multi-thread (4T):** ShardedPulseMap is **6.5–12x faster** than moka across all concurrent workloads.
-
-moka's strength is its W-TinyLFU eviction policy (better hit rates on skewed workloads). PulseMap wins on raw throughput.
-
----
-
-## Memory
-
-### Does PulseMap leak memory?
-
-**No** (since v0.6.0). Slab entries are returned to a free list on eviction/removal.
-- **Rust:** `Drop` chains through SlabPool + free list
-- **C FFI:** User must call `pulse_map_free()` (documented)
-
-### How much memory does PulseMap use?
-
-```
-Memory ≈ capacity × 34.2 bytes + slab_overhead
-```
-
-For inline-only workloads (small KV pairs): ~34.2 bytes per entry at scale.
-
-### Can I use PulseMap in no_std?
-
-Yes! Disable the `std` feature:
-```toml
-pulse_map = { version = "0.6", default-features = false }
-```
-
-Core data structures (`MetaWord`, `Slot`, `Bucket`) work without allocator.
-
----
-
-## Concurrency
-
-### Is PulseMap thread-safe?
-
-- `ConcurrentPulseMap` — fully thread-safe, single-lock architecture
-- `ShardedPulseMap` — fully thread-safe, 16-shard architecture (recommended for 3+ threads)
-- `TypedPulseMap` and `PulseMapRaw` — single-threaded only
-
-### Can I set different TTLs for different keys?
-
-**Yes!** Since v0.6.1, use `insert_ttl(key, value, ttl)`:
-
-```rust
-cache.set_ttl(500);                              // global default
-cache.insert_ttl(b"session", b"data", 50);       // expires after 50
-cache.insert_ttl(b"config", b"val", u32::MAX);   // never expires
-```
-
-### Can I use PulseMap with async/await?
-
-Yes! `ConcurrentPulseMap` and `ShardedPulseMap` methods are non-blocking (spinlock, not mutex):
-
-```rust
-async fn handler(cache: &ShardedPulseMap<String, String>) {
-    // Safe to call from async context — won't block the executor
-    cache.insert("key".to_string(), "val".to_string());
-}
-```
-
-### What happens during resize?
-
-- **ConcurrentPulseMap:** Stop-the-world (exclusive write lock). ~1ms per 10K entries.
-- **ShardedPulseMap:** `resize_all()` rehashes one shard at a time — other shards remain operational.
-
----
-
-## FFI
-
-### Is the C API thread-safe?
-
-Yes! The C API wraps `ConcurrentPulseMap` internally. You can call `pulse_map_insert()` from multiple threads simultaneously.
+Raw/typed maps support no_std with alloc and a suitable portable-atomic fallback.
+C/Python/Java/Node bindings are maintained in a separate repository with their own
+versions and lifetime/threading contracts: [Bindings](ffi-bindings.md).
