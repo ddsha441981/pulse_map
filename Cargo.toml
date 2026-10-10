@@ -28,6 +28,11 @@ exclude = [
     "examples/real_world_latency_spikes.rs",
     "examples/soak_test.rs",
 ]
+# The excluded harnesses above use the std-only concurrent types. Autodiscovery would
+# build them under `--no-default-features` (they'd lose their required-features = ["std"]
+# guard) and break the no_std CI test, so only the explicitly listed examples below are
+# targets. The excluded files stay in-repo as reference, not as `cargo run --example`.
+autoexamples = false
 
 [package.metadata.docs.rs]
 all-features = true
