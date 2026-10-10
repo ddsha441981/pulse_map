@@ -1,65 +1,28 @@
 # API Reference
 
-PulseMap provides four map types. Choose based on your concurrency requirements:
+| Type | Storage API | Threading |
+|---|---|---|
+| `PulseMap` (alias of `PulseMapRaw`) | `&[u8]` keys/values; borrowed lookup result | Send, not Sync |
+| `TypedPulseMap<K,V>` | Owned typed insert/result; iter/entry APIs | Single-owner mutation |
+| `ConcurrentPulseMap<K,V>` | Owned typed values; methods take `&self` | Internally locked |
+| `ShardedPulseMap<K,V>` | Concurrent API across 16 shards | Internally locked per shard |
 
-| Type | Threads | Key/Value | When to Use |
-|------|:-------:|:---------:|-------------|
-| `PulseMapRaw` | ❌ Single | `[u8]` bytes | Max perf, raw bytes, FFI (`Send + !Sync`) |
-| `TypedPulseMap<K, V>` | ❌ Single | Any `PulseKey`/`PulseValue` | Type-safe single-threaded |
-| `ConcurrentPulseMap<K, V>` | ✅ 1–2T | Any `PulseKey`/`PulseValue` | Low-contention concurrent |
-| `ShardedPulseMap<K, V>` | ✅ **3+T** | Any `PulseKey`/`PulseValue` | **High-concurrency production** |
+`PulseKey: Sized` and `PulseValue: Sized` provide associated `Bytes: AsRef<[u8]>`,
+`to_bytes(&self)` and `from_bytes(&[u8]) -> Option<Self>`. PulseKey also provides
+`with_key_bytes`, borrowing key bytes for reads where possible. It must encode the
+same bytes as `to_bytes`.
 
-## Type Aliases
+Both traits: u8/u16/u32/u64/i32/i64/String/`Vec<u8>`. Arrays implement PulseKey only;
+bool implements PulseValue only. Custom implementations define their own encoding.
 
-```rust
-/// Raw byte-level map — maximum control
-pub type PulseMap = PulseMapRaw;
-```
+All maps: new, insert, insert_ttl, get, peek, remove, len, is_empty, capacity,
+load_factor, eviction_count, set_ttl, get_ttl, current_epoch.
 
-## Traits
+- `contains_key`: typed/concurrent/sharded; raw uses `peek(key).is_some()`.
+- `iter`, `entry`, Extend: typed. Raw iteration uses `RawIter::new(&map)`.
+- `num_buckets`: raw and Concurrent; sharded capacity aggregates all shards.
+- `with_auto_resize`: Concurrent and Sharded only.
+- `resize`: Concurrent; `resize_all`: Sharded (growth only).
 
-### PulseKey
-
-```rust
-pub trait PulseKey: Clone + PartialEq {
-    type Bytes: AsRef<[u8]>;
-    fn to_bytes(&self) -> Self::Bytes;
-    fn from_bytes(bytes: &[u8]) -> Option<Self>;
-}
-```
-
-**Implemented for:** `String`, `Vec<u8>`, `u8`, `u16`, `u32`, `u64`, `u128`, `i8`, `i16`, `i32`, `i64`, `i128`
-
-### PulseValue
-
-```rust
-pub trait PulseValue: Clone {
-    type Bytes: AsRef<[u8]>;
-    fn to_bytes(&self) -> Self::Bytes;
-    fn from_bytes(bytes: &[u8]) -> Option<Self>;
-}
-```
-
-**Implemented for:** Same types as `PulseKey`.
-
-## Common Methods (all map types)
-
-| Method | Description |
-|--------|-------------|
-| `new(num_buckets)` | Fixed-size map |
-| `insert(key, value)` | Insert or update (uses global TTL) |
-| `insert_ttl(key, value, ttl: u64)` | Insert with per-entry TTL override *(v0.6.1+)* |
-| `get(&key)` | Lookup — updates eviction priority |
-| `peek(&key)` | Lookup — no priority update (pure read) |
-| `remove(&key)` | Delete, returns `bool` |
-| `contains_key(&key)` | Existence check |
-| `len()` | Number of live entries |
-| `is_empty()` | Check if empty |
-| `capacity()` | Total slot count |
-| `load_factor()` | `len / capacity` |
-| `eviction_count()` | Total evicted entries |
-| `set_ttl(n: u64)` | Global TTL in insertion epochs |
-| `get_ttl() -> u64` | Current global TTL |
-| `current_epoch() -> u64` | Total insertions so far |
-
-See sub-pages for type-specific APIs and examples.
+`len()` means occupied slots, including expired entries. See individual pages and
+[TTL](ttl.md) for lazy visibility. All insertion APIs may evict.

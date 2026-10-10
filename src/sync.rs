@@ -131,8 +131,9 @@ impl MapInner {
 /// Thread-safe PulseMap with per-bucket locking and optional dynamic resize.
 ///
 /// - All methods take `&self` (not `&mut self`) — safe to share via `Arc`.
-/// - Different buckets are accessed fully in parallel.
+/// - Different buckets can overlap, but share epochs and slab mutexes.
 /// - Same bucket: serialized via spinlock (fast for short critical sections).
+/// - Get/peek take the bucket lock; a hit takes the epochs mutex even without TTL.
 /// - Resize: stop-the-world (write lock blocks all ops during rehash).
 ///
 /// # Example
@@ -161,11 +162,13 @@ pub struct ConcurrentPulseMap<K: PulseKey, V: PulseValue> {
     eviction_count: AtomicUsize,
     auto_resize: bool,
     resize_threshold: f64,
+    /// Sharded maps remove their four routing bits before bucket indexing.
+    sharded_index: bool,
     /// Global epoch counter — incremented on every insert.
     current_epoch: AtomicU64,
     /// Default TTL in insertion epochs. 0 = disabled.
     default_ttl: AtomicU64,
-    /// Lock-free ring buffer for deferred LRU/LFU access tracking.
+    /// Bounded lossy ring buffer for deferred LRU/LFU access tracking.
     /// Reads push events here instead of mutating MetaWord inline.
     access_buffer: AccessBuffer,
     _marker: PhantomData<(K, V)>,
@@ -181,12 +184,21 @@ impl<K: PulseKey, V: PulseValue> ConcurrentPulseMap<K, V> {
     /// `num_buckets` is rounded up to the next power of 2.
     /// Total capacity = `actual_buckets × 4` entries.
     pub fn new(num_buckets: usize) -> Self {
+        Self::with_config(num_buckets, false, false)
+    }
+
+    pub(crate) fn new_shard(num_buckets: usize, auto_resize: bool) -> Self {
+        Self::with_config(num_buckets, auto_resize, true)
+    }
+
+    fn with_config(num_buckets: usize, auto_resize: bool, sharded_index: bool) -> Self {
         Self {
             inner: RwLock::new(MapInner::new(num_buckets)),
             count: AtomicUsize::new(0),
             eviction_count: AtomicUsize::new(0),
-            auto_resize: false,
+            auto_resize,
             resize_threshold: 0.75,
+            sharded_index,
             current_epoch: AtomicU64::new(0),
             default_ttl: AtomicU64::new(0),
             access_buffer: AccessBuffer::new(4096),
@@ -209,17 +221,17 @@ impl<K: PulseKey, V: PulseValue> ConcurrentPulseMap<K, V> {
     /// assert!(map.capacity() > 256);
     /// ```
     pub fn with_auto_resize(num_buckets: usize) -> Self {
-        Self {
-            inner: RwLock::new(MapInner::new(num_buckets)),
-            count: AtomicUsize::new(0),
-            eviction_count: AtomicUsize::new(0),
-            auto_resize: true,
-            resize_threshold: 0.75,
-            current_epoch: AtomicU64::new(0),
-            default_ttl: AtomicU64::new(0),
-            access_buffer: AccessBuffer::new(4096),
-            _marker: PhantomData,
-        }
+        Self::with_config(num_buckets, true, false)
+    }
+
+    #[inline]
+    fn bucket_index(&self, hash: u64, mask: usize) -> usize {
+        let hash = if self.sharded_index {
+            crate::sharded::bucket_hash(hash)
+        } else {
+            hash
+        };
+        hash as usize & mask
     }
 
     /// Set TTL in insertion epochs. 0 = disabled (default).
@@ -274,8 +286,8 @@ impl<K: PulseKey, V: PulseValue> ConcurrentPulseMap<K, V> {
     /// Thread-safe insert with a per-entry TTL override.
     ///
     /// - `ttl = 0`: use the map's default TTL
-    /// - `ttl = u64::MAX`: this entry never expires
-    /// - `ttl = N`: this entry expires after N insertions
+    /// - `ttl = u64::MAX`: no expiry (capacity eviction still applies)
+    /// - `ttl = N`: expires when insertion age is greater than N
     pub fn insert_ttl(&self, key: K, value: V, ttl: u64) {
         self.insert_internal(key, value, ttl);
     }
@@ -308,7 +320,7 @@ impl<K: PulseKey, V: PulseValue> ConcurrentPulseMap<K, V> {
         let hr = compute_hash(key_bytes);
 
         let state = self.inner.read().unwrap();
-        let idx = (hr.h1 as usize) & state.bucket_mask;
+        let idx = self.bucket_index(hr.h1, state.bucket_mask);
 
         // Apply deferred get() events before this insert's eviction decision, so
         // reads carry weight. Bounded batch: insert latency stays low, and the
@@ -319,7 +331,7 @@ impl<K: PulseKey, V: PulseValue> ConcurrentPulseMap<K, V> {
         // the retag (Miri: data race on the Bucket allocation). Guards are
         // never nested — the drain runs before this insert's own BucketGuard,
         // and the callback releases each target lock before the next event.
-        // No lock-order cycle: AccessBuffer itself is lock-free.
+        // Buffer operations do not wait or hold a guard across the callback.
         self.access_buffer
             .drain(Self::DRAIN_BATCH, |bucket_idx, slot_idx| {
                 let _target_guard = BucketGuard::new(&state.locks, bucket_idx);
@@ -403,7 +415,7 @@ impl<K: PulseKey, V: PulseValue> ConcurrentPulseMap<K, V> {
             let hr = compute_hash(key_bytes);
 
             let state = self.inner.read().unwrap();
-            let idx = (hr.h1 as usize) & state.bucket_mask;
+            let idx = self.bucket_index(hr.h1, state.bucket_mask);
 
             let _guard = BucketGuard::new(&state.locks, idx);
 
@@ -463,7 +475,7 @@ impl<K: PulseKey, V: PulseValue> ConcurrentPulseMap<K, V> {
             let hr = compute_hash(key_bytes);
 
             let state = self.inner.read().unwrap();
-            let idx = (hr.h1 as usize) & state.bucket_mask;
+            let idx = self.bucket_index(hr.h1, state.bucket_mask);
 
             let _guard = BucketGuard::new(&state.locks, idx);
 
@@ -503,7 +515,7 @@ impl<K: PulseKey, V: PulseValue> ConcurrentPulseMap<K, V> {
             let hr = compute_hash(key_bytes);
 
             let state = self.inner.read().unwrap();
-            let idx = (hr.h1 as usize) & state.bucket_mask;
+            let idx = self.bucket_index(hr.h1, state.bucket_mask);
 
             let _guard = BucketGuard::new(&state.locks, idx);
 
@@ -552,7 +564,11 @@ impl<K: PulseKey, V: PulseValue> ConcurrentPulseMap<K, V> {
             return;
         }
 
-        // Collect all live entries with their TTL data before rehashing.
+        // Queued bucket/slot indices refer to the old layout. Discard these
+        // approximate policy hints while no reader/writer can enqueue more.
+        self.access_buffer.clear();
+
+        // Collect all occupied entries, including expired ones, with TTL data.
         // This decouples extraction from insertion so we can retry with a
         // larger capacity if bucket collisions cause overflow.
         struct EntryData {
@@ -577,9 +593,7 @@ impl<K: PulseKey, V: PulseValue> ConcurrentPulseMap<K, V> {
                 let val_bytes = slot.get_value_bytes(&slab).to_vec();
                 drop(slab);
 
-                if key_bytes.is_empty() {
-                    continue;
-                }
+                // Full state establishes occupancy; an empty byte key is valid.
 
                 // Preserve the original TTL data for this slot
                 let ttl_idx = bucket_idx * 4 + slot_idx as usize;
@@ -611,7 +625,7 @@ impl<K: PulseKey, V: PulseValue> ConcurrentPulseMap<K, V> {
 
             for entry in entries.iter() {
                 let hr = compute_hash(&entry.key_bytes);
-                let new_idx = (hr.h1 as usize) & new_mask;
+                let new_idx = self.bucket_index(hr.h1, new_mask);
                 let new_bucket = unsafe { &mut *new_buckets[new_idx].get() };
 
                 if let Some(free) = new_bucket.meta.find_free_slot() {
@@ -656,11 +670,14 @@ impl<K: PulseKey, V: PulseValue> ConcurrentPulseMap<K, V> {
 
     // ── Stats ──
 
+    /// Number of occupied slots, including expired-but-unreclaimed entries.
+    /// This counter is not a consistent snapshot of concurrent operations.
     #[inline]
     pub fn len(&self) -> usize {
         self.count.load(Ordering::Relaxed)
     }
 
+    /// True when no slots are occupied, including expired entries.
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
@@ -672,6 +689,7 @@ impl<K: PulseKey, V: PulseValue> ConcurrentPulseMap<K, V> {
         state.num_buckets * 4
     }
 
+    /// Occupied slots divided by nominal capacity, including expired entries.
     #[inline]
     pub fn load_factor(&self) -> f64 {
         let cap = self.capacity();

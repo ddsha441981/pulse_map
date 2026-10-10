@@ -6,6 +6,53 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.6.6] — 2026-10-10
+
+### Fixed
+
+- Preserve valid empty-byte keys, values and per-entry TTL during concurrent manual,
+  automatic and sharded resize. Regression tests fail on v0.6.5 and pass here.
+- Remove shard-routing bits before bucket indexing on every sharded CRUD/rehash
+  path. Above 16,384 buckets/shard, added capacity now improves distribution:
+  the 1M-key probe retains 967,051 vs 821,839 at 32,768 buckets/shard.
+- Sequence-tag access-buffer publication and reuse to prevent duplicate delivery
+  during overlapping wraparound drains. Keep bounded lossy try operations, release
+  queue ownership before callbacks, discard stale indices on resize, and remove
+  silent 24-bit bucket-index truncation. Key/value storage remains separate.
+
+### Documentation and evaluation
+
+- Align occupied-slot counts/iteration, epoch TTL, inline/slab allocation, actual
+  read locks and eviction formula with implementation. Compile README/mdBook Rust
+  examples in the normal rustdoc suite. Bindings are independently versioned.
+- Add a pinned in-repo evaluation workspace comparing registry v0.6.5 with the
+  candidate in the same executable. Shared traces, equal nominal capacities,
+  independent write decisions, isolated RSS, repeated timing and source provenance.
+- Correct rounded capacities in legacy benchmarks and report actual residency.
+  Add adaptation, semantic, large-shard and properly labelled host-contention probes.
+- Add deterministic regression tests, small-generation Loom models and Miri coverage.
+- Trim the published crate: heavy benchmark/soak example harnesses are excluded from
+  the package but stay declared, `cargo run --example`-runnable harnesses in the repo;
+  six teaching examples still ship.
+
+### Measured trade-offs
+
+- Queue slots now contain two usize atomics: +48 KiB per Concurrent map on x86_64,
+  +768 KiB for sixteen shards. Queue operations are bounded try operations, not
+  a formally lock-free FIFO: a stalled producer can delay consumption.
+- Paired deterministic hit/resident counts match on 63 hit-rate rows, 32 adaptation
+  rows and 6 routing/sensor rows. Frequency still does not age; changing hot sets
+  can adapt poorly. This release does not change the eviction policy or TTL clock.
+- Some threaded workloads are slower. Full u64 4T sharded measurements were
+  9.56–9.75 vs 10.52–11.03 Mops/s; u32 sharded RSS was 61.75 vs 48.12 B/resident.
+  See [all-trial report](evaluation/results/t05-full/report.md) and
+  [validation log](evaluation/PROGRESS.md). No universal performance improvement
+  or physical-MCU timing claim is made.
+
+Prepared locally; publication and remote CI status are separate from these checks.
+
+---
+
 ## [0.6.5] — 2026-09-28
 
 ### 🔬 Validation & Hardening

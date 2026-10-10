@@ -1,0 +1,22 @@
+[package]
+name = "pulsemap-evaluation"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# Independent lockfile: benchmark dependency updates cannot silently change results.
+[workspace]
+
+[dependencies]
+pulse_map = { path = ".." }
+baseline = { package = "pulse_map", version = "=0.6.5" }
+lru = "=0.12.5"
+quick_cache = "=0.6.24"
+moka = { version = "=0.12.16", features = ["sync"] }
+rand = "=0.8.8"
+rand_distr = "=0.4.3"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1

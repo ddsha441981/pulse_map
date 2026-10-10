@@ -97,9 +97,11 @@ jobs:
       # --lib skips doc-tests: they re-run the same code paths at roughly the same cost.
       - name: Run Miri (std, concurrent + sharded)
         run: cargo miri test -p pulse_map --lib
+      - name: Run Miri (resize and shard-growth regressions)
+        run: cargo miri test -p pulse_map --test resize_regressions --test shard_growth
 
   # ═══════════════════════════════════════════════════════════
-  # loom (concurrency interleavings in lock-free code)
+  # loom (concurrency interleavings in atomic code)
   # ═══════════════════════════════════════════════════════════
   loom:
     name: Loom
@@ -112,7 +114,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       # Only the loom_* integration tests. `--cfg loom` swaps the engine's atomics
       # for loom's instrumented ones, which panic outside a `loom::model`, so the
-      # 58 unit tests deliberately stay out of this job.
+      # Ordinary unit tests deliberately stay out of this job.
       - name: Run loom models
         run: cargo test -p pulse_map --test loom_meta --test loom_access_buffer
 
@@ -220,6 +222,25 @@ jobs:
       - run: cargo doc -p pulse_map --no-deps
         env:
           RUSTDOCFLAGS: -D warnings
+
+  # ═══════════════════════════════════════════════════════════
+  # Evaluation correctness; no timing/RSS thresholds
+  # ═══════════════════════════════════════════════════════════
+  evaluation:
+    name: Paired evaluation smoke
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: evaluation
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --all-targets --locked -- -D warnings
+      - run: cargo test --locked
+      - run: cargo run --release --locked -- all --smoke
 
   # ═══════════════════════════════════════════════════════════
   # Publish to crates.io (on tag push only)

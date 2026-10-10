@@ -1,0 +1,8 @@
+# baseline=registry:0.6.5 candidate=path:.. capacity=65536 ops=2000000 trials=3
+kind,cache,buckets_per_shard,capacity,inserts,resident
+boundary,baseline-sharded,8192,524288,1000000,514096
+boundary,candidate-sharded,8192,524288,1000000,514096
+boundary,baseline-sharded,16384,1048576,1000000,821839
+boundary,candidate-sharded,16384,1048576,1000000,821839
+boundary,baseline-sharded,32768,2097152,1000000,821839
+boundary,candidate-sharded,32768,2097152,1000000,967051

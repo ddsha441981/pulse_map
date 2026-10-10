@@ -1,141 +1,128 @@
 // Copyright (c) 2026 Deendayal Kumawat. All rights reserved.
 // Licensed under the MIT OR Apache-2.0 license.
 
-//! AccessBuffer — Lock-free lossy ring buffer for deferred LRU/LFU updates.
+//! Bounded, lossy MPMC access tracking for deferred eviction updates.
 //!
-//! When a `get()` finds a cache hit, instead of mutating the MetaWord's priority
-//! inline (which requires exclusive bucket access), it pushes an access event into
-//! this buffer. The buffer is drained during `insert()` operations, piggybacking
-//! eviction tracking on write operations without needing a background thread.
+//! Each slot has a sequence number: a producer reserves its head position, writes
+//! the payload, then publishes it with Release. A consumer acquires that sequence,
+//! claims the tail position, reads the payload and releases the slot for its next
+//! generation BEFORE invoking the callback. Advancing tail alone never permits reuse.
 //!
-//! The buffer is **lossy**: if it's full, new events are silently dropped.
-//! This is acceptable because LRU/LFU accuracy degrades gracefully — a missed
-//! access event only slightly delays priority promotion, and under high load
-//! (when the buffer fills), eviction accuracy matters less than read latency.
+//! Push and pop each attempt one CAS; contention/full/unpublished head means skip,
+//! not spin. A stalled producer can delay consumption, so this is not a formal
+//! lock-free FIFO. Eviction tracking tolerates loss; key/value storage is separate.
 
 #[cfg(not(loom))]
-use core::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
-
-// See the note in `meta.rs`: `--cfg loom` swaps in loom's instrumented atomics
-// for `tests/loom_access_buffer.rs`.
+use core::sync::atomic::{AtomicUsize, Ordering};
 #[cfg(loom)]
-use loom::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
+use loom::sync::atomic::{AtomicUsize, Ordering};
 
-/// A single access event: which bucket and slot were accessed.
-#[repr(C)]
 struct AccessEvent {
-    /// Packed: bucket_idx (upper 24 bits) | slot_idx (lower 8 bits)
-    data: AtomicU32,
+    sequence: AtomicUsize,
+    // Bucket index in upper bits, slot index (0..4) in low two bits. Using usize
+    // avoids the old 24-bit bucket-index truncation on large 64-bit maps.
+    data: AtomicUsize,
 }
 
-impl AccessEvent {
-    const EMPTY: u32 = u32::MAX;
-
-    fn new_empty() -> Self {
-        Self {
-            data: AtomicU32::new(Self::EMPTY),
-        }
-    }
-
-    #[inline]
-    fn pack(bucket_idx: usize, slot_idx: u8) -> u32 {
-        ((bucket_idx as u32) << 8) | (slot_idx as u32)
-    }
-
-    #[inline]
-    fn unpack(val: u32) -> (usize, u8) {
-        let bucket_idx = (val >> 8) as usize;
-        let slot_idx = (val & 0xFF) as u8;
-        (bucket_idx, slot_idx)
-    }
-}
-
-/// Lock-free lossy ring buffer for access events.
-///
-/// Capacity is fixed at creation and must be a power of 2.
+/// A bounded sequence-tagged queue. Operations never wait for another producer.
 pub struct AccessBuffer {
     buffer: Vec<AccessEvent>,
     mask: usize,
-    head: AtomicUsize, // write position
-    tail: AtomicUsize, // read position
+    head: AtomicUsize,
+    tail: AtomicUsize,
 }
 
 impl AccessBuffer {
-    /// Create a new access buffer with the given capacity (rounded up to power of 2).
     pub fn new(capacity: usize) -> Self {
-        let cap = capacity.max(64).next_power_of_two();
-        let buffer = (0..cap).map(|_| AccessEvent::new_empty()).collect();
+        let min = if cfg!(loom) { 2 } else { 64 };
+        let capacity = capacity.max(min).next_power_of_two();
+        let buffer = (0..capacity)
+            .map(|i| AccessEvent {
+                sequence: AtomicUsize::new(i),
+                data: AtomicUsize::new(0),
+            })
+            .collect();
         Self {
             buffer,
-            mask: cap - 1,
+            mask: capacity - 1,
             head: AtomicUsize::new(0),
             tail: AtomicUsize::new(0),
         }
     }
 
-    /// Push an access event. Returns true if pushed, false if buffer is full (event dropped).
-    /// This is called from the hot `get()` path and must be extremely fast.
+    /// Try to record an event. False means full/contention or an invalid event.
     #[inline]
     pub fn push(&self, bucket_idx: usize, slot_idx: u8) -> bool {
-        let head = self.head.load(Ordering::Relaxed);
-        let tail = self.tail.load(Ordering::Relaxed);
-
-        // Buffer full — drop the event (lossy)
-        if head.wrapping_sub(tail) > self.mask {
+        if slot_idx >= 4 || bucket_idx > usize::MAX >> 2 {
             return false;
         }
-
-        let idx = head & self.mask;
-        let packed = AccessEvent::pack(bucket_idx, slot_idx);
-        self.buffer[idx].data.store(packed, Ordering::Relaxed);
-        self.head.store(head.wrapping_add(1), Ordering::Release);
-        true
-    }
-
-    /// Drain up to `max_events` from the buffer. Calls `f(bucket_idx, slot_idx)` for each.
-    /// Called from `insert()` in bounded batches, before its eviction decision.
-    ///
-    /// Multi-consumer safe: the range `[tail, tail + to_drain)` is claimed by a CAS
-    /// on `tail` before any slot is read, so concurrent drains never double-deliver.
-    /// A failed claim just returns — another drain owns the range, and skipped
-    /// events stay queued for the next drain, within the lossy contract.
-    #[inline]
-    pub fn drain(&self, max_events: usize, mut f: impl FnMut(usize, u8)) {
-        let tail = self.tail.load(Ordering::Relaxed);
-        let head = self.head.load(Ordering::Acquire);
-        let to_drain = head.wrapping_sub(tail).min(max_events);
-        if to_drain == 0 {
-            return;
+        let head = self.head.load(Ordering::Relaxed);
+        let slot = &self.buffer[head & self.mask];
+        if slot.sequence.load(Ordering::Acquire) != head {
+            return false;
         }
-
-        // Strong CAS, no retry: a failure means another consumer claimed first.
         if self
-            .tail
+            .head
             .compare_exchange(
-                tail,
-                tail.wrapping_add(to_drain),
-                Ordering::Acquire,
+                head,
+                head.wrapping_add(1),
+                Ordering::Relaxed,
                 Ordering::Relaxed,
             )
             .is_err()
         {
-            return;
+            return false;
         }
+        slot.data
+            .store((bucket_idx << 2) | slot_idx as usize, Ordering::Relaxed);
+        slot.sequence.store(head.wrapping_add(1), Ordering::Release);
+        true
+    }
 
-        for i in 0..to_drain {
-            let idx = (tail.wrapping_add(i)) & self.mask;
-            let val = self.buffer[idx].data.load(Ordering::Relaxed);
-            if val != AccessEvent::EMPTY {
-                let (bucket_idx, slot_idx) = AccessEvent::unpack(val);
-                f(bucket_idx, slot_idx);
-                self.buffer[idx]
-                    .data
-                    .store(AccessEvent::EMPTY, Ordering::Relaxed);
-            }
+    #[inline]
+    fn pop(&self) -> Option<(usize, u8)> {
+        let tail = self.tail.load(Ordering::Relaxed);
+        let slot = &self.buffer[tail & self.mask];
+        if slot.sequence.load(Ordering::Acquire) != tail.wrapping_add(1) {
+            return None;
         }
+        if self
+            .tail
+            .compare_exchange(
+                tail,
+                tail.wrapping_add(1),
+                Ordering::Relaxed,
+                Ordering::Relaxed,
+            )
+            .is_err()
+        {
+            return None;
+        }
+        let data = slot.data.load(Ordering::Relaxed);
+        slot.sequence
+            .store(tail.wrapping_add(self.buffer.len()), Ordering::Release);
+        Some((data >> 2, (data & 3) as u8))
+    }
+
+    /// Consume at most max_events, stopping on contention or unpublished/empty head.
+    /// A slot is released before f: slow callbacks cannot race its next generation.
+    #[inline]
+    pub fn drain(&self, max_events: usize, mut f: impl FnMut(usize, u8)) {
+        for _ in 0..max_events {
+            let Some((bucket, slot)) = self.pop() else {
+                break;
+            };
+            f(bucket, slot);
+        }
+    }
+
+    /// Discard queued indices before rehash. Caller holds the map's exclusive
+    /// resize lock, so no map operation can concurrently push or drain events.
+    pub(crate) fn clear(&self) {
+        self.drain(self.buffer.len(), |_, _| {});
     }
 }
 
-// Safety: AccessBuffer uses only atomics, safe to share across threads.
-unsafe impl Send for AccessBuffer {}
-unsafe impl Sync for AccessBuffer {}
+#[cfg(all(test, not(loom)))]
+#[path = "access_buffer_tests.rs"]
+mod tests;

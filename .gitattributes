@@ -1,0 +1,2 @@
+# Raw provenance diffs contain space-prefixed context lines by definition.
+evaluation/results/**/tracked.patch -whitespace

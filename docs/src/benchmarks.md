@@ -1,113 +1,54 @@
 # Performance & Benchmarks
 
-> Results from v0.6.2 · Criterion · Dell Latitude 7490 · i7-8650U · Linux
+The authoritative current methodology and raw evidence live in
+[`evaluation/`](https://github.com/ddsha441981/pulse_map/tree/staging/v0.6.6/evaluation).
+It compares published v0.6.5 and the local correctness candidate in one optimized
+executable with pinned LRU, QuickCache and Moka dependencies.
 
-## Single-Thread (100K ops)
+## Comparing fairly
 
-| Benchmark | PulseMap | `lru` | `quick_cache` | `moka` |
-|-----------|:-------:|:-----:|:-------------:|:------:|
-| **INSERT** | **6.1 ms** | 19.1 ms | 5.6 ms | 161 ms |
-| **LOOKUP** | 4.2 ms | 5.4 ms | **2.8 ms** | 40 ms |
-| **MIXED** | 8.5 ms | 23.7 ms | **8.4 ms** | 187 ms |
-| **EVICTION (50K)** | **1.9 ms** 🥇 | 2.3 ms | 3.3 ms | 55.5 ms |
+- Equal actual nominal capacity; bucket rounding is explicit.
+- Like-for-like u32/u32 (PulseMap inline) or u64/u64 (slab).
+- Shared seeded traces and operation choices, with independent read/write RNG.
+- Native single-thread LRU separately labelled from `Mutex<LruCache>`.
+- Fresh-process RSS per map; report both bytes/slot and bytes/resident.
+- Repeat timing trials and report spread. CPU scheduling and map policies vary.
 
-### Where PulseMap Wins
+These are host measurements. They are not physical-MCU timing results. TTL-disabled
+concurrent hits still take the epochs mutex, and slab/value-copy costs remain.
 
-**Eviction-heavy workloads** — PulseMap's core strength. Eviction metadata lives in the same 64-byte cache line as data slots, so eviction decisions cost zero additional cache misses.
+## Historical results
 
-- **1.7x faster** than quick_cache on eviction
-- **29x faster** than moka on eviction
-- **3.1x faster** than lru on insert
+Older v0.6.2 figures and cache-miss/ranking claims in this guide are superseded.
+Some old comparisons used a 10,000-entry competitor against PulseMap rounded to
+16,384 slots; nominal memory denominators also hid occupancy differences. Historical
+outputs remain in repository history and labelled artifacts, not as current rankings.
 
-### Where PulseMap Loses
-
-**Pure lookup** — PulseMap stores values as serialized bytes (enabling `no_std` + FFI bindings), which adds deserialization cost on read.
-*Note: the `AtomicU64` MetaWord (spinlock-free metadata updates) and `AccessBuffer` narrowed the gap on concurrent lookups in v0.6.2.*
-
-- quick_cache lookup: **1.5x faster** than PulseMap
-- lru lookup: PulseMap is now faster (4.2 ms vs 5.4 ms)
-
-## Multi-Thread — 4 Threads, 100K ops
-
-| Benchmark | ShardedPulseMap | ConcurrentPulseMap | `moka` |
-|-----------|:--------------:|:-----------------:|:------:|
-| **4T INSERT** | **8.8 ms** 🥇 | 20.2 ms | 104 ms |
-| **4T LOOKUP** | **7.0 ms** 🥇 | 35.0 ms | 21.1 ms |
-| **4T MIXED** | **12.4 ms** 🥇 | 46.6 ms | 197 ms |
-
-### ShardedPulseMap Advantage
-
-ShardedPulseMap uses 16 independent shards with separate locks. This eliminates the global RwLock bottleneck in ConcurrentPulseMap.
-
-- **2.3–3.9x faster** than ConcurrentPulseMap
-- **6.5–12x faster** than moka on concurrent workloads
-
-## vs std::HashMap (reference only)
-
-HashMap has no eviction — it's a different category entirely:
-
-| Benchmark (100K ops) | PulseMap | std::HashMap | Note |
-|---------------------|:-------:|:------------:|:----:|
-| INSERT | 6.1 ms | 2.5 ms | std has no eviction |
-| LOOKUP | 4.2 ms | 2.9 ms | std uses SIMD + native types |
-| EVICTION | **1.9 ms** | N/A | HashMap can't evict |
-
-## Memory Efficiency
-
-| Map Size | PulseMap | `lru` | Savings |
-|:--------:|:-------:|:-------:|:-------:|
-| 1K entries | ~34 KB | ~68 KB | **50%** |
-| 10K entries | ~342 KB | ~678 KB | **50%** |
-| 100K entries | ~3.4 MB | ~6.8 MB | **50%** |
-| 1M entries | ~34.2 MB | ~67.7 MB | **50%** |
-
-## Running Benchmarks
+## Reproduce
 
 ```bash
-# All benchmarks
-cargo bench
-
-# Specific category
-cargo bench -- insert
-cargo bench -- "4t"        # 4-thread benchmarks
-cargo bench -- moka        # moka comparison
-cargo bench -- sharded     # ShardedPulseMap only
-cargo bench -- eviction
-
-# With SIMD (x86_64 only)
-cargo bench --features simd
+cargo test --manifest-path evaluation/Cargo.toml --locked
+python3 evaluation/capture.py my-unique-label
+cargo bench --bench benchmark -- 'conc_|sharded_'
 ```
 
-## Cache Line Efficiency
+Capture labels must be new. See evaluation/README.md for workload and RSS limitations.
 
-```
-L1 cache hit rate during lookup:
+## v0.6.6 correctness candidate
 
-PulseMap:   ~98% (1 cache line per lookup)
-HashMap:    ~60% (2-3 cache lines, pointer chasing)
-BTreeMap:   ~40% (tree traversal, multiple lines)
-```
+[Full paired report](https://github.com/ddsha441981/pulse_map/blob/staging/v0.6.6/evaluation/results/t05-full/report.md)
+includes three-seed means/ranges and all raw observations. At 65,536 slots and 2M
+cache-aside operations, candidate TypedPulseMap hit rate was 73.26% on Zipf .99,
+23.05% on a repeated 3×capacity scan, and 90.58% on changing hot sets; LRU measured
+71.69%, 0%, and 97.54% respectively. Scan resistance and adaptation are distinct.
 
-## Profiling Tips
+All 63 paired deterministic hit-rate rows match v0.6.5. The separate large-shard
+probe retains 967,051 of 1M keys vs 821,839 before the routing fix. The buffer fix
+costs 48 KiB/Concurrent map on x86_64 (768 KiB over 16 shards). Measured u32 sharded
+RSS was 61.75 B/resident vs 48.12 before; QuickCache was 50.12. Inline typed remained
+40.04 B/resident. RSS includes allocator/page effects; the queue allocation increase
+is structural.
 
-```bash
-# CPU cache analysis with perf
-perf stat -e cache-misses,cache-references cargo bench
-
-# Flamegraph
-cargo install flamegraph
-cargo flamegraph --bench benchmark
-
-# Valgrind memory analysis
-valgrind --tool=cachegrind target/release/examples/basic
-```
-
-## Bottlenecks & Limits
-
-| Scenario | Bottleneck | Mitigation |
-|----------|-----------|------------|
-| Many threads, same key | Bucket spinlock contention | Use `ShardedPulseMap` |
-| Resize during load | Stop-the-world pause | Use `ShardedPulseMap::resize_all()` |
-| Large keys (>6B) | Slab allocation | Use short keys when possible |
-| >4 entries/bucket | Eviction overhead | Increase bucket count |
-| Pure read workloads | Serialization cost | Accept trade-off for `no_std`/FFI |
+Four-thread u64 sharded throughput was 9.56–9.75 Mops/s vs 10.52–11.03 for v0.6.5.
+This is a measured correctness/performance cost, not a speedup release. Several
+other timing rows show substantial host variance; no universal ranking follows.

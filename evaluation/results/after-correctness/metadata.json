@@ -1,0 +1,250 @@
+{
+  "revision": "4f4098583c05b063ba764d295f7373a633a9adf2",
+  "status": " M ../.idea/pulse_map.iml\n M ../src/engine/access_buffer.rs\n M ../src/sync.rs\n M ../tests/loom_access_buffer.rs\n?? ../src/engine/access_buffer_tests.rs\n",
+  "rustc": "rustc 1.97.0-nightly (52b6e2c20 2026-04-27)\nbinary: rustc\ncommit-hash: 52b6e2c208b73276ccb36ec0b68456913a801c96\ncommit-date: 2026-04-27\nhost: x86_64-unknown-linux-gnu\nrelease: 1.97.0-nightly\nLLVM version: 22.1.2\n",
+  "platform": "Linux-7.0.0-34-generic-x86_64-with-glibc2.43",
+  "cpu": "Architecture:                            x86_64\nCPU op-mode(s):                          32-bit, 64-bit\nAddress sizes:                           39 bits physical, 48 bits virtual\nByte Order:                              Little Endian\nCPU(s):                                  8\nOn-line CPU(s) list:                     0-7\nVendor ID:                               GenuineIntel\nModel name:                              Intel(R) Core(TM) i7-8650U CPU @ 1.90GHz\nCPU family:                              6\nModel:                                   142\nThread(s) per core:                      2\nCore(s) per socket:                      4\nSocket(s):                               1\nStepping:                                10\nCPU(s) scaling MHz:                      45%\nCPU max MHz:                             4200.0000\nCPU min MHz:                             400.0000\nBogoMIPS:                                4199.88\nFlags:                                   fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf pni pclmulqdq dtes64 monitor ds_cpl vmx smx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault epb pti ssbd ibrs ibpb stibp tpr_shadow flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid mpx rdseed adx smap clflushopt intel_pt xsaveopt xsavec xgetbv1 xsaves dtherm ida arat pln pts hwp hwp_notify hwp_act_window hwp_epp vnmi md_clear flush_l1d arch_capabilities\nVirtualization:                          VT-x\nL1d cache:                               128 KiB (4 instances)\nL1i cache:                               128 KiB (4 instances)\nL2 cache:                                1 MiB (4 instances)\nL3 cache:                                8 MiB (1 instance)\nNUMA node(s):                            1\nNUMA node0 CPU(s):                       0-7\nVulnerability Gather data sampling:      Vulnerable\nVulnerability Ghostwrite:                Not affected\nVulnerability Indirect target selection: Not affected\nVulnerability Itlb multihit:             KVM: Mitigation: Split huge pages\nVulnerability L1tf:                      Mitigation; PTE Inversion; VMX conditional cache flushes, SMT vulnerable\nVulnerability Mds:                       Mitigation; Clear CPU buffers; SMT vulnerable\nVulnerability Meltdown:                  Mitigation; PTI\nVulnerability Mmio stale data:           Mitigation; Clear CPU buffers; SMT vulnerable\nVulnerability Old microcode:             Not affected\nVulnerability Reg file data sampling:    Not affected\nVulnerability Retbleed:                  Mitigation; IBRS\nVulnerability Spec rstack overflow:      Not affected\nVulnerability Spec store bypass:         Mitigation; Speculative Store Bypass disabled via prctl\nVulnerability Spectre v1:                Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:                Mitigation; IBRS; IBPB conditional; STIBP conditional; RSB filling; PBRSB-eIBRS Not affected; BHI Not affected\nVulnerability Srbds:                     Mitigation; Microcode\nVulnerability Tsa:                       Not affected\nVulnerability Tsx async abort:           Mitigation; TSX disabled\nVulnerability Vmscape:                   Mitigation; IBPB before exit to userspace\n",
+  "smoke": false,
+  "packages": [
+    {
+      "name": "ahash",
+      "version": "0.8.12",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "manifest_path": "/home/ddsha441981/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ahash-0.8.12/Cargo.toml"
+    },
+    {
+      "name": "allocator-api2",
+      "version": "0.2.21",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "manifest_path": "/home/ddsha441981/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/allocator-api2-0.2.21/Cargo.toml"
+    },
+    {
+      "name": "autocfg",
+      "version": "1.5.1",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "manifest_path": "/home/ddsha441981/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/autocfg-1.5.1/Cargo.toml"
+    },
+    {
+      "name": "cfg-if",
+      "version": "1.0.5",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "manifest_path": "/home/ddsha441981/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cfg-if-1.0.5/Cargo.toml"
+    },
+    {
+      "name": "crossbeam-channel",
+      "version": "0.5.17",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "manifest_path": "/home/ddsha441981/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/crossbeam-channel-0.5.17/Cargo.toml"
+    },
+    {
+      "name": "crossbeam-epoch",
+      "version": "0.9.21",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "manifest_path": "/home/ddsha441981/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/crossbeam-epoch-0.9.21/Cargo.toml"
+    },
+    {
+      "name": "crossbeam-utils",
+      "version": "0.8.23",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "manifest_path": "/home/ddsha441981/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/crossbeam-utils-0.8.23/Cargo.toml"
+    },
+    {
+      "name": "equivalent",
+      "version": "1.0.2",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "manifest_path": "/home/ddsha441981/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/equivalent-1.0.2/Cargo.toml"
+    },
+    {
+      "name": "foldhash",
+      "version": "0.1.5",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "manifest_path": "/home/ddsha441981/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/foldhash-0.1.5/Cargo.toml"
+    },
+    {
+      "name": "getrandom",
+      "version": "0.2.17",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "manifest_path": "/home/ddsha441981/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/getrandom-0.2.17/Cargo.toml"
+    },
+    {
+      "name": "getrandom",
+      "version": "0.3.4",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "manifest_path": "/home/ddsha441981/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/getrandom-0.3.4/Cargo.toml"
+    },
+    {
+      "name": "getrandom",
+      "version": "0.4.3",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "manifest_path": "/home/ddsha441981/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/getrandom-0.4.3/Cargo.toml"
+    },
+    {
+      "name": "hashbrown",
+      "version": "0.15.5",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "manifest_path": "/home/ddsha441981/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/hashbrown-0.15.5/Cargo.toml"
+    },
+    {
+      "name": "hashbrown",
+      "version": "0.16.1",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "manifest_path": "/home/ddsha441981/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/hashbrown-0.16.1/Cargo.toml"
+    },
+    {
+      "name": "libc",
+      "version": "0.2.190",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "manifest_path": "/home/ddsha441981/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/libc-0.2.190/Cargo.toml"
+    },
+    {
+      "name": "libm",
+      "version": "0.2.16",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "manifest_path": "/home/ddsha441981/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/libm-0.2.16/Cargo.toml"
+    },
+    {
+      "name": "lock_api",
+      "version": "0.4.14",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "manifest_path": "/home/ddsha441981/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/lock_api-0.4.14/Cargo.toml"
+    },
+    {
+      "name": "lru",
+      "version": "0.12.5",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "manifest_path": "/home/ddsha441981/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/lru-0.12.5/Cargo.toml"
+    },
+    {
+      "name": "moka",
+      "version": "0.12.16",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "manifest_path": "/home/ddsha441981/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/moka-0.12.16/Cargo.toml"
+    },
+    {
+      "name": "num-traits",
+      "version": "0.2.19",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "manifest_path": "/home/ddsha441981/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/num-traits-0.2.19/Cargo.toml"
+    },
+    {
+      "name": "once_cell",
+      "version": "1.21.4",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "manifest_path": "/home/ddsha441981/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/once_cell-1.21.4/Cargo.toml"
+    },
+    {
+      "name": "parking_lot",
+      "version": "0.12.5",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "manifest_path": "/home/ddsha441981/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/parking_lot-0.12.5/Cargo.toml"
+    },
+    {
+      "name": "parking_lot_core",
+      "version": "0.9.12",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "manifest_path": "/home/ddsha441981/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/parking_lot_core-0.9.12/Cargo.toml"
+    },
+    {
+      "name": "portable-atomic",
+      "version": "1.15.0",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "manifest_path": "/home/ddsha441981/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/portable-atomic-1.15.0/Cargo.toml"
+    },
+    {
+      "name": "ppv-lite86",
+      "version": "0.2.21",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "manifest_path": "/home/ddsha441981/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ppv-lite86-0.2.21/Cargo.toml"
+    },
+    {
+      "name": "pulse_map",
+      "version": "0.6.5",
+      "source": null,
+      "manifest_path": "/home/ddsha441981/Desktop/plusmap/pulse_map/Cargo.toml"
+    },
+    {
+      "name": "pulse_map",
+      "version": "0.6.5",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "manifest_path": "/home/ddsha441981/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pulse_map-0.6.5/Cargo.toml"
+    },
+    {
+      "name": "pulsemap-evaluation",
+      "version": "0.1.0",
+      "source": null,
+      "manifest_path": "/home/ddsha441981/Desktop/plusmap/pulse_map/evaluation/Cargo.toml"
+    },
+    {
+      "name": "quick_cache",
+      "version": "0.6.24",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "manifest_path": "/home/ddsha441981/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/quick_cache-0.6.24/Cargo.toml"
+    },
+    {
+      "name": "rand",
+      "version": "0.8.8",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "manifest_path": "/home/ddsha441981/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rand-0.8.8/Cargo.toml"
+    },
+    {
+      "name": "rand_chacha",
+      "version": "0.3.1",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "manifest_path": "/home/ddsha441981/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rand_chacha-0.3.1/Cargo.toml"
+    },
+    {
+      "name": "rand_core",
+      "version": "0.6.4",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "manifest_path": "/home/ddsha441981/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rand_core-0.6.4/Cargo.toml"
+    },
+    {
+      "name": "rand_distr",
+      "version": "0.4.3",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "manifest_path": "/home/ddsha441981/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rand_distr-0.4.3/Cargo.toml"
+    },
+    {
+      "name": "scopeguard",
+      "version": "1.2.0",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "manifest_path": "/home/ddsha441981/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/scopeguard-1.2.0/Cargo.toml"
+    },
+    {
+      "name": "smallvec",
+      "version": "1.16.2",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "manifest_path": "/home/ddsha441981/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/smallvec-1.16.2/Cargo.toml"
+    },
+    {
+      "name": "tagptr",
+      "version": "0.2.0",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "manifest_path": "/home/ddsha441981/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tagptr-0.2.0/Cargo.toml"
+    },
+    {
+      "name": "uuid",
+      "version": "1.27.0",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "manifest_path": "/home/ddsha441981/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/uuid-1.27.0/Cargo.toml"
+    },
+    {
+      "name": "version_check",
+      "version": "0.9.5",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "manifest_path": "/home/ddsha441981/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/version_check-0.9.5/Cargo.toml"
+    },
+    {
+      "name": "wyhash",
+      "version": "0.5.0",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "manifest_path": "/home/ddsha441981/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wyhash-0.5.0/Cargo.toml"
+    },
+    {
+      "name": "zerocopy",
+      "version": "0.8.59",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "manifest_path": "/home/ddsha441981/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/zerocopy-0.8.59/Cargo.toml"
+    }
+  ]
+}

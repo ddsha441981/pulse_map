@@ -22,7 +22,8 @@ use crate::SlotState;
 
 /// 64-bit metadata word containing state, fingerprints, and priority for 4 slots.
 ///
-/// Uses `AtomicU64` internally to support lock-free reads.
+/// Uses `AtomicU64` internally. The portable fallback can use locks or critical
+/// sections on targets without native 64-bit atomics.
 /// All getter methods use `Relaxed` atomic loads.
 /// Mutating methods (`set_*`, `on_access`, `on_insert`) use atomic stores or CAS.
 #[repr(transparent)]
@@ -202,7 +203,7 @@ impl MetaWord {
     /// Called on access (lookup hit): boost frequency, set recency to max.
     ///
     /// Uses a CAS loop so it can be called from a shared reference (`&self`),
-    /// enabling lock-free priority updates from the read path.
+    /// enabling atomic priority updates from the read path.
     #[inline]
     pub fn on_access(&self, slot: u8) {
         loop {

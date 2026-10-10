@@ -1,0 +1,111 @@
+diff --git a/Cargo.toml b/Cargo.toml
+index 09aabac..44c435d 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -3,7 +3,7 @@ members = ["."]
+ 
+ [package]
+ name = "pulse_map"
+-version = "0.6.5"
++version = "0.6.6"
+ edition = "2021"
+ rust-version = "1.70.0"
+ authors = ["Deendayal Kumawat <deendayal_kumawat@outlook.com>"]
+diff --git a/src/lib.rs b/src/lib.rs
+index d02cd16..9a7af08 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -886,7 +886,7 @@ mod tests {
+     #[cfg(feature = "std")]
+     #[test]
+     // Skipped under Miri: 16384 buckets with 4 × 1000 threaded inserts is the largest case in
+-    // the suite; test_concurrent_multithread_read_write (4096) covers the same threaded path.
++    // the suite; the scaled test_concurrent_multithread_read_write covers the threaded path.
+     #[cfg_attr(miri, ignore)]
+     fn test_concurrent_multithread_insert() {
+         use std::sync::Arc;
+@@ -914,13 +914,21 @@ mod tests {
+     #[cfg(feature = "std")]
+     #[test]
+     fn test_concurrent_multithread_read_write() {
+-        use std::sync::Arc;
++        use std::sync::{Arc, Barrier};
+         use std::thread;
+ 
+-        let map = Arc::new(ConcurrentPulseMap::<u32, u32>::new(4096));
++        // The production-scale case exceeded 20 minutes under Miri. Keep the same
++        // four-thread read/write paths and value oracle with a smaller workload.
++        let (buckets, entries, ops) = if cfg!(miri) {
++            (64, 16, 32)
++        } else {
++            (4096, 500, 500)
++        };
++        let map = Arc::new(ConcurrentPulseMap::<u32, u32>::new(buckets));
++        let barrier = Arc::new(Barrier::new(4));
+ 
+         // Pre-fill
+-        for i in 0..500u32 {
++        for i in 0..entries {
+             map.insert(i, i * 10);
+         }
+ 
+@@ -928,12 +936,17 @@ mod tests {
+         let handles: Vec<_> = (0..4)
+             .map(|t| {
+                 let m = map.clone();
++                let barrier = barrier.clone();
+                 thread::spawn(move || {
+-                    for i in 0..500u32 {
++                    barrier.wait();
++                    for i in 0..ops {
+                         if t % 2 == 0 {
+-                            m.insert(500 + t * 1000 + i, i);
++                            m.insert(entries + t * 1000 + i, i);
+                         } else {
+-                            let _ = m.get(&(i % 500));
++                            let key = i % entries;
++                            if let Some(value) = m.get(&key) {
++                                assert_eq!(value, key * 10);
++                            }
+                         }
+                     }
+                 })
+diff --git a/src/sharded.rs b/src/sharded.rs
+index 2979ec9..d88b791 100644
+--- a/src/sharded.rs
++++ b/src/sharded.rs
+@@ -241,8 +241,8 @@ mod tests {
+ 
+     #[test]
+     // Skipped under Miri: 16 shards × 16384 buckets = 16 MB of tracked allocation, measured at
+-    // >17 min and 2.2 GB RSS without finishing. test_sharded_resize_all (1024/shard) exercises
+-    // the same insert+get path at 1/16 the size.
++    // >17 min and 2.2 GB RSS without finishing. test_sharded_resize_all exercises
++    // the same insert+get path at a smaller interpreter-friendly size.
+     #[cfg_attr(miri, ignore)]
+     fn test_sharded_basic_insert_get() {
+         // 16384 buckets/shard → 65K slots/shard. 1000 keys / 16 shards ≈ 62/shard = 0.1% load.
+@@ -285,16 +285,18 @@ mod tests {
+ 
+     #[test]
+     fn test_sharded_resize_all() {
+-        // Start with 1024 buckets/shard (safe for 500 keys), resize to 2048.
+-        let map = ShardedPulseMap::<u32, u32>::new(1024);
+-        for i in 0u32..500 {
++        // Same migration/value assertions at both sizes; normal tests keep the
++        // original 1024→2048 bucket geometry, Miri avoids giant tracked arrays.
++        let (buckets, entries) = if cfg!(miri) { (4, 16) } else { (1024, 500) };
++        let map = ShardedPulseMap::<u32, u32>::new(buckets);
++        for i in 0..entries {
+             map.insert(i, i);
+         }
+         let before = map.capacity();
+-        map.resize_all(2048);
++        map.resize_all(buckets * 2);
+         assert!(map.capacity() > before);
+         // All entries survive the rehash
+-        for i in 0u32..500 {
++        for i in 0..entries {
+             assert_eq!(map.get(&i), Some(i));
+         }
+     }

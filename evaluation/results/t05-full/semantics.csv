@@ -1,0 +1,4 @@
+# baseline=registry:0.6.5 candidate=path:.. capacity=65536 ops=2000000 trials=3
+kind,cache,result
+semantics,baseline-typed,pass
+semantics,candidate-typed,pass

@@ -1,5 +1,7 @@
 /target
 Cargo.lock
+!evaluation/Cargo.lock
+/evaluation/target/
 *.swp
 *.swo
 .DS_Store

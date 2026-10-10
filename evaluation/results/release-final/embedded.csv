@@ -1,0 +1,20 @@
+# baseline=registry:0.6.5 candidate=path:.. capacity=65536 ops=2000000 trials=3
+kind,trace,seed,cache,type,capacity,ops,hits,resident,seconds
+embedded,host_routing,42,baseline-typed,u32,2048,100000,40039,2039,0.012108
+embedded,host_routing,42,candidate-typed,u32,2048,100000,40039,2039,0.014053
+embedded,host_routing,42,lru,u32,2048,100000,40390,2048,0.007271
+embedded,host_sensors,42,baseline-typed,u32,256,10000,8074,256,0.000572
+embedded,host_sensors,42,candidate-typed,u32,256,10000,8074,256,0.000607
+embedded,host_sensors,42,lru,u32,256,10000,7985,256,0.000199
+embedded,host_routing,43,baseline-typed,u32,2048,100000,40030,2039,0.006655
+embedded,host_routing,43,candidate-typed,u32,2048,100000,40030,2039,0.007642
+embedded,host_routing,43,lru,u32,2048,100000,40647,2048,0.004959
+embedded,host_sensors,43,baseline-typed,u32,256,10000,8093,256,0.000500
+embedded,host_sensors,43,candidate-typed,u32,256,10000,8093,256,0.000522
+embedded,host_sensors,43,lru,u32,256,10000,7988,256,0.000187
+embedded,host_routing,44,baseline-typed,u32,2048,100000,40281,2039,0.009139
+embedded,host_routing,44,candidate-typed,u32,2048,100000,40281,2039,0.009006
+embedded,host_routing,44,lru,u32,2048,100000,40526,2048,0.004464
+embedded,host_sensors,44,baseline-typed,u32,256,10000,8146,256,0.000489
+embedded,host_sensors,44,candidate-typed,u32,256,10000,8146,256,0.000486
+embedded,host_sensors,44,lru,u32,256,10000,8013,256,0.000169

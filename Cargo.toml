@@ -3,7 +3,7 @@ members = ["."]
 
 [package]
 name = "pulse_map"
-version = "0.6.5"
+version = "0.6.6"
 edition = "2021"
 rust-version = "1.70.0"
 authors = ["Deendayal Kumawat <deendayal_kumawat@outlook.com>"]
@@ -15,8 +15,21 @@ documentation = "https://ddsha441981.github.io/pulse_map/"
 readme = "README.md"
 keywords = ["cache", "hashmap", "lru", "lfu", "no-std"]
 categories = ["data-structures", "caching", "no-std", "concurrency"]
-# Keep IDE config and stray example output out of the published crate.
-exclude = [".idea/", "*.out"]
+# Keep IDE config, stray output and the eval workspace out of the published crate.
+# The heavy benchmark/soak harnesses below are excluded too, but stay declared
+# examples (required-features = ["std"]): they remain `cargo run --example`-runnable
+# and are skipped by the no_std build. cargo drops them from the package on publish
+# with an "ignoring example ... not included in the published package" warning.
+exclude = [
+    ".idea/",
+    "*.out",
+    "evaluation/",
+    "examples/production_suite_test.rs",
+    "examples/quality_and_readheavy.rs",
+    "examples/readratio_isolated.rs",
+    "examples/real_world_latency_spikes.rs",
+    "examples/soak_test.rs",
+]
 
 [package.metadata.docs.rs]
 all-features = true
@@ -80,6 +93,14 @@ name = "memory_baseline"
 required-features = ["std"]
 
 [[example]]
+name = "drain_latency"
+required-features = ["std"]
+
+[[example]]
+name = "hitrate_16384"
+required-features = ["std"]
+
+[[example]]
 name = "production_suite_test"
 required-features = ["std"]
 
@@ -94,16 +115,9 @@ required-features = ["std"]
 [[example]]
 name = "real_world_latency_spikes"
 required-features = ["std"]
+
 [[example]]
 name = "soak_test"
-required-features = ["std"]
-
-[[example]]
-name = "drain_latency"
-required-features = ["std"]
-
-[[example]]
-name = "hitrate_16384"
 required-features = ["std"]
 
 [profile.release]

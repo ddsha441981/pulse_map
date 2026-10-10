@@ -30,6 +30,7 @@ use rand_distr::{Distribution, Zipf};
 use std::num::NonZeroUsize;
 
 trait BenchCache {
+    fn resident(&self) -> usize;
     fn insert(&mut self, k: u32, v: u32);
     fn get(&mut self, k: u32) -> Option<u32>;
     fn name(&self) -> &'static str;
@@ -37,6 +38,9 @@ trait BenchCache {
 
 struct PulseAdapter(ShardedPulseMap<u32, u32>);
 impl BenchCache for PulseAdapter {
+    fn resident(&self) -> usize {
+        self.0.len()
+    }
     fn insert(&mut self, k: u32, v: u32) {
         self.0.insert(k, v);
     }
@@ -50,6 +54,10 @@ impl BenchCache for PulseAdapter {
 
 struct MokaAdapter(MokaCache<u32, u32>);
 impl BenchCache for MokaAdapter {
+    fn resident(&self) -> usize {
+        self.0.run_pending_tasks();
+        self.0.entry_count() as usize
+    }
     fn insert(&mut self, k: u32, v: u32) {
         self.0.insert(k, v);
     }
@@ -63,6 +71,9 @@ impl BenchCache for MokaAdapter {
 
 struct QuickAdapter(QuickCache<u32, u32>);
 impl BenchCache for QuickAdapter {
+    fn resident(&self) -> usize {
+        self.0.len()
+    }
     fn insert(&mut self, k: u32, v: u32) {
         self.0.insert(k, v);
     }
@@ -76,6 +87,9 @@ impl BenchCache for QuickAdapter {
 
 struct LruAdapter(LruCache<u32, u32>);
 impl BenchCache for LruAdapter {
+    fn resident(&self) -> usize {
+        self.0.len()
+    }
     fn insert(&mut self, k: u32, v: u32) {
         self.0.put(k, v);
     }
@@ -88,6 +102,8 @@ impl BenchCache for LruAdapter {
 }
 
 fn make_caches(capacity: usize) -> Vec<Box<dyn BenchCache>> {
+    assert!(capacity >= 64 && capacity.is_power_of_two());
+    println!("requested={capacity}, actual nominal capacity={capacity} for all caches");
     vec![
         Box::new(PulseAdapter(ShardedPulseMap::<u32, u32>::new(
             capacity / 64,
@@ -154,6 +170,11 @@ fn run_hit_rate_test(
                 }
             }
             let hit_rate = hits as f64 / get_attempts as f64 * 100.0;
+            println!(
+                "trial={trial} cache={} reads={get_attempts} hits={hits} residents={}",
+                cache.name(),
+                cache.resident()
+            );
 
             let name = cache.name();
             match results.iter_mut().find(|r| r.name == name) {
@@ -179,11 +200,11 @@ fn run_hit_rate_test(
 
 fn main() {
     println!("🔬 READ-RATIO ISOLATION TEST 🔬");
-    println!("Controls: capacity=10,000 (10% of 100,000 key space), Zipf exponent=1.3,");
+    println!("Controls: actual capacity=16,384 (100,000 key space), Zipf exponent=1.3,");
     println!("no pre-population, single-threaded, 5 seeded trials — identical to Scenario D");
     println!("except for the read/write ratio, so we isolate ONLY that variable.\n");
 
-    const CAPACITY: usize = 10_000;
+    const CAPACITY: usize = 16_384;
     const KEY_SPACE: u64 = 100_000;
     const ZIPF_EXP: f64 = 1.3;
     const TOTAL_OPS: u32 = 2_000_000;

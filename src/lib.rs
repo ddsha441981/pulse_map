@@ -7,8 +7,9 @@
 //!
 //! Every bucket fits in exactly **one 64-byte cache line** with embedded
 //! LFU+LRU eviction metadata. Eviction decisions require zero additional
-//! cache misses because the priority data lives inside the metadata word
-//! that was already fetched for the fingerprint check.
+//! metadata cache-line fetches because the priority data lives inside the metadata
+//! word already fetched for the fingerprint check. TTL/slab/concurrency structures
+//! require additional storage and accesses; operations are not cost-free.
 //!
 //! ## Quick Start
 //! ```
@@ -50,6 +51,10 @@ mod simd;
 #[cfg(feature = "std")]
 mod sync;
 mod traits;
+
+// Compile the guide's actual Rust examples, not copies that can drift from it.
+#[cfg(all(doctest, feature = "std"))]
+mod guide_doctests;
 
 // ── Re-exports ──
 // `AccessBuffer` is internal; `--cfg loom` exposes it so `tests/loom_access_buffer.rs`
@@ -386,8 +391,8 @@ impl<K: PulseKey, V: PulseValue> TypedPulseMap<K, V> {
     /// Insert a key-value pair with a per-entry TTL override.
     ///
     /// - `ttl = 0`: use the map's default TTL (`set_ttl()`)
-    /// - `ttl = u64::MAX`: this entry never expires
-    /// - `ttl = N`: this entry expires after N insertions
+    /// - `ttl = u64::MAX`: no expiry (capacity eviction still applies)
+    /// - `ttl = N`: expires when insertion age is greater than N
     pub fn insert_ttl(&mut self, key: K, value: V, ttl: u64) {
         let kb = key.to_bytes();
         let vb = value.to_bytes();
@@ -414,16 +419,19 @@ impl<K: PulseKey, V: PulseValue> TypedPulseMap<K, V> {
         key.with_key_bytes(|kb| self.raw.peek(kb).is_some())
     }
 
-    /// Iterate over all (key, value) pairs.
+    /// Iterate over occupied pairs, including expired entries. Failed custom
+    /// key/value deserializations are skipped. Does not update priority.
     pub fn iter(&self) -> TypedIter<'_, K, V> {
         TypedIter::new(&self.raw)
     }
 
+    /// Number of occupied slots, including expired-but-unreclaimed entries.
     #[inline]
     pub fn len(&self) -> usize {
         self.raw.len()
     }
 
+    /// True when there are no occupied slots, not merely no unexpired entries.
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.raw.is_empty()
@@ -434,6 +442,7 @@ impl<K: PulseKey, V: PulseValue> TypedPulseMap<K, V> {
         self.raw.capacity()
     }
 
+    /// Occupied slots divided by nominal capacity, including expired entries.
     #[inline]
     pub fn load_factor(&self) -> f64 {
         self.raw.load_factor()
@@ -455,10 +464,13 @@ impl<K: PulseKey, V: PulseValue> TypedPulseMap<K, V> {
     /// ```
     /// use pulse_map::TypedPulseMap;
     /// let mut map = TypedPulseMap::<u32, u32>::new(16);
-    /// map.set_ttl(2); // entries expire after 2 insertions
+    /// map.set_ttl(2); // expire when age > 2, not at age == 2
     /// map.insert(1, 100);
     /// map.insert(2, 200);
-    /// map.insert(3, 300); // this is the 3rd insert, key=1 may expire now
+    /// map.insert(3, 300);
+    /// assert_eq!(map.get(&1), Some(100)); // age == 2
+    /// map.insert(3, 301);
+    /// assert_eq!(map.get(&1), None);      // age == 3
     /// ```
     #[inline]
     pub fn set_ttl(&mut self, ttl_epochs: u64) {
@@ -874,7 +886,7 @@ mod tests {
     #[cfg(feature = "std")]
     #[test]
     // Skipped under Miri: 16384 buckets with 4 × 1000 threaded inserts is the largest case in
-    // the suite; test_concurrent_multithread_read_write (4096) covers the same threaded path.
+    // the suite; the scaled test_concurrent_multithread_read_write covers the threaded path.
     #[cfg_attr(miri, ignore)]
     fn test_concurrent_multithread_insert() {
         use std::sync::Arc;
@@ -902,13 +914,21 @@ mod tests {
     #[cfg(feature = "std")]
     #[test]
     fn test_concurrent_multithread_read_write() {
-        use std::sync::Arc;
+        use std::sync::{Arc, Barrier};
         use std::thread;
 
-        let map = Arc::new(ConcurrentPulseMap::<u32, u32>::new(4096));
+        // The production-scale case exceeded 20 minutes under Miri. Keep the same
+        // four-thread read/write paths and value oracle with a smaller workload.
+        let (buckets, entries, ops) = if cfg!(miri) {
+            (64, 16, 32)
+        } else {
+            (4096, 500, 500)
+        };
+        let map = Arc::new(ConcurrentPulseMap::<u32, u32>::new(buckets));
+        let barrier = Arc::new(Barrier::new(4));
 
         // Pre-fill
-        for i in 0..500u32 {
+        for i in 0..entries {
             map.insert(i, i * 10);
         }
 
@@ -916,12 +936,17 @@ mod tests {
         let handles: Vec<_> = (0..4)
             .map(|t| {
                 let m = map.clone();
+                let barrier = barrier.clone();
                 thread::spawn(move || {
-                    for i in 0..500u32 {
+                    barrier.wait();
+                    for i in 0..ops {
                         if t % 2 == 0 {
-                            m.insert(500 + t * 1000 + i, i);
+                            m.insert(entries + t * 1000 + i, i);
                         } else {
-                            let _ = m.get(&(i % 500));
+                            let key = i % entries;
+                            if let Some(value) = m.get(&key) {
+                                assert_eq!(value, key * 10);
+                            }
                         }
                     }
                 })
