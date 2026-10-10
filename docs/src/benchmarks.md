@@ -1,7 +1,7 @@
 # Performance & Benchmarks
 
 The authoritative current methodology and raw evidence live in
-[`evaluation/`](https://github.com/ddsha441981/pulse_map/tree/staging/v0.6.6/evaluation).
+[`evaluation/`](https://github.com/ddsha441981/pulse_map/tree/main/evaluation).
 It compares published v0.6.5 and the local correctness candidate in one optimized
 executable with pinned LRU, QuickCache and Moka dependencies.
 
@@ -36,7 +36,7 @@ Capture labels must be new. See evaluation/README.md for workload and RSS limita
 
 ## v0.6.6 correctness candidate
 
-[Full paired report](https://github.com/ddsha441981/pulse_map/blob/staging/v0.6.6/evaluation/results/t05-full/report.md)
+[Full paired report](https://github.com/ddsha441981/pulse_map/blob/main/evaluation/results/t05-full/report.md)
 includes three-seed means/ranges and all raw observations. At 65,536 slots and 2M
 cache-aside operations, candidate TypedPulseMap hit rate was 73.26% on Zipf .99,
 23.05% on a repeated 3×capacity scan, and 90.58% on changing hot sets; LRU measured
