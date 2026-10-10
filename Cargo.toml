@@ -15,9 +15,11 @@ documentation = "https://ddsha441981.github.io/pulse_map/"
 readme = "README.md"
 keywords = ["cache", "hashmap", "lru", "lfu", "no-std"]
 categories = ["data-structures", "caching", "no-std", "concurrency"]
-# Keep IDE config, stray output, the eval workspace, and heavy benchmark/soak
-# harnesses out of the published crate. The harness examples stay runnable locally
-# (autodiscovered); they just don't ship to crates.io.
+# Keep IDE config, stray output and the eval workspace out of the published crate.
+# The heavy benchmark/soak harnesses below are excluded too, but stay declared
+# examples (required-features = ["std"]): they remain `cargo run --example`-runnable
+# and are skipped by the no_std build. cargo drops them from the package on publish
+# with an "ignoring example ... not included in the published package" warning.
 exclude = [
     ".idea/",
     "*.out",
@@ -28,11 +30,6 @@ exclude = [
     "examples/real_world_latency_spikes.rs",
     "examples/soak_test.rs",
 ]
-# The excluded harnesses above use the std-only concurrent types. Autodiscovery would
-# build them under `--no-default-features` (they'd lose their required-features = ["std"]
-# guard) and break the no_std CI test, so only the explicitly listed examples below are
-# targets. The excluded files stay in-repo as reference, not as `cargo run --example`.
-autoexamples = false
 
 [package.metadata.docs.rs]
 all-features = true
@@ -101,6 +98,26 @@ required-features = ["std"]
 
 [[example]]
 name = "hitrate_16384"
+required-features = ["std"]
+
+[[example]]
+name = "production_suite_test"
+required-features = ["std"]
+
+[[example]]
+name = "quality_and_readheavy"
+required-features = ["std"]
+
+[[example]]
+name = "readratio_isolated"
+required-features = ["std"]
+
+[[example]]
+name = "real_world_latency_spikes"
+required-features = ["std"]
+
+[[example]]
+name = "soak_test"
 required-features = ["std"]
 
 [profile.release]

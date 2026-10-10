@@ -31,9 +31,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Correct rounded capacities in legacy benchmarks and report actual residency.
   Add adaptation, semantic, large-shard and properly labelled host-contention probes.
 - Add deterministic regression tests, small-generation Loom models and Miri coverage.
-- Trim the published crate: heavy benchmark/soak example harnesses no longer ship and
-  are no longer `cargo run --example` targets (kept in-repo for reference); six
-  teaching examples still ship.
+- Trim the published crate: heavy benchmark/soak example harnesses are excluded from
+  the package but stay declared, `cargo run --example`-runnable harnesses in the repo;
+  six teaching examples still ship.
 
 ### Measured trade-offs
 
