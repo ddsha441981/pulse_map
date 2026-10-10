@@ -31,6 +31,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Correct rounded capacities in legacy benchmarks and report actual residency.
   Add adaptation, semantic, large-shard and properly labelled host-contention probes.
 - Add deterministic regression tests, small-generation Loom models and Miri coverage.
+- Trim the published crate: heavy benchmark/soak example harnesses are excluded from
+  the package (still in-repo and runnable locally); six teaching examples still ship.
 
 ### Measured trade-offs
 

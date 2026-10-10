@@ -15,8 +15,19 @@ documentation = "https://ddsha441981.github.io/pulse_map/"
 readme = "README.md"
 keywords = ["cache", "hashmap", "lru", "lfu", "no-std"]
 categories = ["data-structures", "caching", "no-std", "concurrency"]
-# Keep IDE config and stray example output out of the published crate.
-exclude = [".idea/", "*.out", "evaluation/"]
+# Keep IDE config, stray output, the eval workspace, and heavy benchmark/soak
+# harnesses out of the published crate. The harness examples stay runnable locally
+# (autodiscovered); they just don't ship to crates.io.
+exclude = [
+    ".idea/",
+    "*.out",
+    "evaluation/",
+    "examples/production_suite_test.rs",
+    "examples/quality_and_readheavy.rs",
+    "examples/readratio_isolated.rs",
+    "examples/real_world_latency_spikes.rs",
+    "examples/soak_test.rs",
+]
 
 [package.metadata.docs.rs]
 all-features = true
@@ -77,25 +88,6 @@ required-features = ["std"]
 
 [[example]]
 name = "memory_baseline"
-required-features = ["std"]
-
-[[example]]
-name = "production_suite_test"
-required-features = ["std"]
-
-[[example]]
-name = "quality_and_readheavy"
-required-features = ["std"]
-
-[[example]]
-name = "readratio_isolated"
-required-features = ["std"]
-
-[[example]]
-name = "real_world_latency_spikes"
-required-features = ["std"]
-[[example]]
-name = "soak_test"
 required-features = ["std"]
 
 [[example]]
