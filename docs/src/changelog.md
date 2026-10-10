@@ -2,7 +2,7 @@
 
 See the full [CHANGELOG.md](https://github.com/ddsha441981/pulse_map/blob/main/CHANGELOG.md) in the repository root.
 
-## Unreleased (v0.6.6)
+## v0.6.6 (2026-10-10)
 
 - Preserve empty keys/TTL during resize; independent shard/bucket hash bits above
   the old growth boundary; sequence-tagged access events prevent overlapping-wrap
